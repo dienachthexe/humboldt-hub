@@ -53,7 +53,7 @@ jobs:
           except Exception as e:
               print(f'Notice: CONTENTdm harvest skipped or failed: {e}')
 
-          # --- PART 2: MARCXML HARVEST (Refined for finding-aids.xml) ---
+          # --- PART 2: MARCXML HARVEST ---
           xml_files = glob.glob('finding*.xml')
           if not xml_files:
               print('ERROR: No XML file starting with finding found!')
@@ -63,15 +63,12 @@ jobs:
               tree = ET.parse(target_file)
               root = tree.getroot()
               
-              # Looking for record tags (handling namespaces flexibly)
               marcs = root.findall('.//record')
               if not marcs:
-                  # Fallback for namespaced records if needed
                   ns = {'m': 'http://www.loc.gov/MARC21/slim'}
                   marcs = root.findall('.//m:record', ns)
 
               for record in marcs:
-                  # Get Title (245 $a and $b)
                   t_field = record.find(\".//datafield[@tag='245']\")
                   title = 'Unknown Finding Aid'
                   if t_field is not None:
@@ -79,19 +76,17 @@ jobs:
                       b = t_field.find(\"subfield[@code='b']\")
                       title = f\"{a.text if a is not None else ''} {b.text if b is not None else ''}\".strip()
                   
-                  # Get MMS ID (001) for the link
                   id_field = record.find(\".//controlfield[@tag='001']\")
                   mms_id = id_field.text if id_field is not None else '0'
                   
-                  # Get Summary (520 $a)
                   d_field = record.find(\".//datafield[@tag='520']\")
                   desc = 'Archival collection finding aid.'
                   if d_field is not None:
                       d_sub = d_field.find(\"subfield[@code='a']\")
                       if d_sub is not None: desc = d_sub.text
                   
-                  # Build the Primo Link & use Folder Icon
-                  link = f'https://hsu-primo.hosted.exlibrisgroup.com/discovery/fulldisplay?docid=alma{mms_id}&vid=01CALS_HUL:HUL'
+                  # UPDATED PRIMO PERMALINK STRUCTURE
+                  link = f'https://csu-humboldt.primo.exlibrisgroup.com/permalink/01CALS_HUL/omcour/alma{mms_id}'
                   icon = 'https://img.icons8.com/color/96/folder-invoices--v1.png'
                   
                   all_data.append([title, 'Archives', 'Multiple Dates', desc, 'Finding Aid', 'Humboldt County', 'Check Finding Aid for Rights', icon, link])
@@ -108,6 +103,5 @@ jobs:
           git config --global user.name 'humboldt-hub-robot'
           git config --global user.email 'robot@humboldt-hub.local'
           git add master.csv
-          # The '|| exit 0' prevents erroring out if nothing changed
-          git commit -m "Merged Finding Aids and Photos" || exit 0
+          git commit -m "Merged Finding Aids and Photos with corrected Permalink URL" || exit 0
           git push
