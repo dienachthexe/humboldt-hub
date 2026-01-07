@@ -1,23 +1,4 @@
-name: Palmquist Yale Harvest
-on:
-  workflow_dispatch:
-
-jobs:
-  harvest:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Hub
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      - name: Install Sickle
-        run: pip install sickle
-
-      - name: Harvest 100 Palmquist Records
+- name: Harvest 100 Palmquist Records
         run: |
           python -c "
           from sickle import Sickle
@@ -28,30 +9,28 @@ jobs:
           
           with open('master.csv', 'w', newline='', encoding='utf-8') as f:
               writer = csv.writer(f)
-              writer.writerow(['Title', 'Creator', 'Date', 'Thumbnail', 'Link'])
+              # Expanded headers based on your schema mapping
+              writer.writerow(['Title', 'Creator', 'Date', 'Description', 'Subject', 'Coverage', 'Rights', 'Thumbnail', 'Link'])
               
               for i, record in enumerate(records):
                   if i >= 100: break
                   m = record.metadata
                   
-                  # Use the OAI Header to get the true CONTENTdm System ID
                   system_id = record.header.identifier.split('/')[-1]
                   
-                  thumb = f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{system_id}'
-                  link = f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{system_id}'
-                  
+                  # CONTENTdm often returns lists for these; we join them with a semicolon
+                  def get_all(field):
+                      return ' ; '.join(m.get(field, []))
+
                   writer.writerow([
-                      m.get('title', [''])[0],
-                      m.get('creator', [''])[0],
-                      m.get('date', [''])[0],
-                      thumb,
-                      link
+                      get_all('title'),
+                      get_all('creator'),
+                      get_all('date'),
+                      get_all('description'),
+                      get_all('subject'),
+                      get_all('coverage'),
+                      get_all('rights'),
+                      f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{system_id}',
+                      f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{system_id}'
                   ])
           "
-      - name: Save to GitHub
-        run: |
-          git config --global user.name 'humboldt-hub-robot'
-          git config --global user.email 'robot@humboldt-hub.local'
-          git add master.csv
-          git commit -m "Fixed thumbnail logic using System ID"
-          git push
