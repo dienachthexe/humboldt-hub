@@ -23,54 +23,79 @@ jobs:
           from sickle import Sickle
           import csv
           import xml.etree.ElementTree as ET
-          
-          # --- PART 1: CONTENTdm HARVEST ---
-          sickle = Sickle('https://cdm16166.contentdm.oclc.org/oai/oai.php')
-          records = sickle.ListRecords(metadataPrefix='oai_dc', set='palmquistyale', ignore_deleted=True)
+          import glob
           
           all_data = []
-          for i, record in enumerate(records):
-              if i >= 100: break
-              m = record.metadata
-              system_id = record.header.identifier.split('/')[-1]
-              
-              all_data.append([
-                  ' ; '.join(m.get('title', [])),
-                  ' ; '.join(m.get('creator', [])),
-                  ' ; '.join(m.get('date', [])),
-                  ' ; '.join(m.get('description', [])),
-                  ' ; '.join(m.get('subject', [])),
-                  ' ; '.join(m.get('coverage', [])),
-                  ' ; '.join(m.get('rights', [])),
-                  f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{system_id}',
-                  f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{system_id}'
-              ])
 
-          # --- PART 2: MARCXML HARVEST ---
-          ns = {'marc': 'http://www.loc.gov/MARC21/slim'}
-          # Make sure this matches your filename exactly!
-          tree = ET.parse('finding-aids.xml')
-          root = tree.getroot()
-          
-          for record in root.findall('.//marc:record', ns):
-              # Get Title (245 $a)
-              t_field = record.find(\".//marc:datafield[@tag='245']\", ns)
-              title = t_field.find(\"marc:subfield[@code='a']\", ns).text if t_field is not None else 'Unknown Finding Aid'
+          # --- PART 1: CONTENTdm HARVEST ---
+          print('Starting CONTENTdm harvest...')
+          try:
+              sickle = Sickle('https://cdm16166.contentdm.oclc.org/oai/oai.php')
+              records = sickle.ListRecords(metadataPrefix='oai_dc', set='palmquistyale', ignore_deleted=True)
               
-              # Get MMS ID (001) for the link
-              mms_id = record.find(\".//marc:controlfield[@tag='001']\", ns).text
+              for i, record in enumerate(records):
+                  if i >= 100: break
+                  m = record.metadata
+                  system_id = record.header.identifier.split('/')[-1]
+                  
+                  all_data.append([
+                      ' ; '.join(m.get('title', [])),
+                      ' ; '.join(m.get('creator', [])),
+                      ' ; '.join(m.get('date', [])),
+                      ' ; '.join(m.get('description', [])),
+                      ' ; '.join(m.get('subject', [])),
+                      ' ; '.join(m.get('coverage', [])),
+                      ' ; '.join(m.get('rights', [])),
+                      f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{system_id}',
+                      f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{system_id}'
+                  ])
+              print(f'Successfully harvested {len(all_data)} photos.')
+          except Exception as e:
+              print(f'Notice: CONTENTdm harvest skipped or failed: {e}')
+
+          # --- PART 2: MARCXML HARVEST (Refined for finding-aids.xml) ---
+          xml_files = glob.glob('finding*.xml')
+          if not xml_files:
+              print('ERROR: No XML file starting with finding found!')
+          else:
+              target_file = xml_files[0]
+              print(f'Found XML file: {target_file}. Starting translation...')
+              tree = ET.parse(target_file)
+              root = tree.getroot()
               
-              # Get Summary (520 $a)
-              d_field = record.find(\".//marc:datafield[@tag='520']\", ns)
-              desc = d_field.find(\"marc:subfield[@code='a']\", ns).text if d_field is not None else 'Archival collection finding aid.'
-              
-              # Build the Primo Link
-              link = f'https://hsu-primo.hosted.exlibrisgroup.com/discovery/fulldisplay?docid=alma{mms_id}&vid=01CALS_HUL:HUL'
-              
-              # Use a Folder Icon for finding aids
-              icon = 'https://img.icons8.com/color/96/folder-invoices--v1.png'
-              
-              all_data.append([title, 'Archives', 'Multiple Dates', desc, 'Finding Aid', 'Humboldt County', 'Check Finding Aid for Rights', icon, link])
+              # Looking for record tags (handling namespaces flexibly)
+              marcs = root.findall('.//record')
+              if not marcs:
+                  # Fallback for namespaced records if needed
+                  ns = {'m': 'http://www.loc.gov/MARC21/slim'}
+                  marcs = root.findall('.//m:record', ns)
+
+              for record in marcs:
+                  # Get Title (245 $a and $b)
+                  t_field = record.find(\".//datafield[@tag='245']\")
+                  title = 'Unknown Finding Aid'
+                  if t_field is not None:
+                      a = t_field.find(\"subfield[@code='a']\")
+                      b = t_field.find(\"subfield[@code='b']\")
+                      title = f\"{a.text if a is not None else ''} {b.text if b is not None else ''}\".strip()
+                  
+                  # Get MMS ID (001) for the link
+                  id_field = record.find(\".//controlfield[@tag='001']\")
+                  mms_id = id_field.text if id_field is not None else '0'
+                  
+                  # Get Summary (520 $a)
+                  d_field = record.find(\".//datafield[@tag='520']\")
+                  desc = 'Archival collection finding aid.'
+                  if d_field is not None:
+                      d_sub = d_field.find(\"subfield[@code='a']\")
+                      if d_sub is not None: desc = d_sub.text
+                  
+                  # Build the Primo Link & use Folder Icon
+                  link = f'https://hsu-primo.hosted.exlibrisgroup.com/discovery/fulldisplay?docid=alma{mms_id}&vid=01CALS_HUL:HUL'
+                  icon = 'https://img.icons8.com/color/96/folder-invoices--v1.png'
+                  
+                  all_data.append([title, 'Archives', 'Multiple Dates', desc, 'Finding Aid', 'Humboldt County', 'Check Finding Aid for Rights', icon, link])
+              print(f'Successfully added {len(marcs)} finding aids.')
 
           # --- PART 3: SAVE TO CSV ---
           with open('master.csv', 'w', newline='', encoding='utf-8') as f:
@@ -83,5 +108,6 @@ jobs:
           git config --global user.name 'humboldt-hub-robot'
           git config --global user.email 'robot@humboldt-hub.local'
           git add master.csv
-          git commit -m "Merged Finding Aids and Photos"
+          # The '|| exit 0' prevents erroring out if nothing changed
+          git commit -m "Merged Finding Aids and Photos" || exit 0
           git push
