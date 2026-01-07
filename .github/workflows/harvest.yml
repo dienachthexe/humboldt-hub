@@ -1,6 +1,6 @@
-name: Baby Step Harvest
+name: Palmquist Yale Harvest
 on:
-  workflow_dispatch: # This adds the "Play" button on GitHub
+  workflow_dispatch:
 
 jobs:
   harvest:
@@ -14,36 +14,47 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install Sickle (The Harvester Tool)
+      - name: Install Sickle
         run: pip install sickle
 
-      - name: Harvest 10 Records
+      - name: Harvest 100 Palmquist Records
         run: |
           python -c "
           from sickle import Sickle
           import csv
           
+          # We are now targeting ONLY the palmquistyale set
           sickle = Sickle('https://cdm16166.contentdm.oclc.org/oai/oai.php')
-          records = sickle.ListRecords(metadataPrefix='oai_dc', ignore_deleted=True)
+          records = sickle.ListRecords(metadataPrefix='oai_dc', set='palmquistyale', ignore_deleted=True)
           
           with open('master.csv', 'w', newline='', encoding='utf-8') as f:
               writer = csv.writer(f)
-              writer.writerow(['Title', 'Creator', 'Date', 'Identifier'])
+              # Added 'Thumbnail' and 'Link' columns
+              writer.writerow(['Title', 'Creator', 'Date', 'Thumbnail', 'Link'])
               
               for i, record in enumerate(records):
-                  if i >= 10: break
-                  metadata = record.metadata
+                  if i >= 100: break # Let's try 100 this time!
+                  m = record.metadata
+                  
+                  # CONTENTdm ID is tucked inside the identifier field
+                  raw_id = m.get('identifier', [''])[0]
+                  clean_id = raw_id.split('/')[-1] if '/' in raw_id else ''
+                  
+                  thumb = f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{clean_id}'
+                  link = f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{clean_id}'
+                  
                   writer.writerow([
-                      metadata.get('title', [''])[0],
-                      metadata.get('creator', [''])[0],
-                      metadata.get('date', [''])[0],
-                      metadata.get('identifier', [''])[0]
+                      m.get('title', [''])[0],
+                      m.get('creator', [''])[0],
+                      m.get('date', [''])[0],
+                      thumb,
+                      link
                   ])
           "
-      - name: Save the CSV back to GitHub
+      - name: Save to GitHub
         run: |
           git config --global user.name 'humboldt-hub-robot'
           git config --global user.email 'robot@humboldt-hub.local'
           git add master.csv
-          git commit -m "Robot harvested 10 fresh records!"
+          git commit -m "Harvested 100 Palmquist-Yale records with thumbnails"
           git push
