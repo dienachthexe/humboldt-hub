@@ -63,6 +63,7 @@
     const searchInput = document.getElementById('search');
     const modal = document.getElementById('itemModal');
 
+    // Load the CSV
     Papa.parse('master.csv', {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
@@ -71,20 +72,25 @@
         }
     });
 
+    // We pass the "filtered" data here so it always stays in sync
     function display(items) {
-        gallery.innerHTML = items.map((item, index) => `
-            <div class="card" onclick="openModal(${index})">
-                <img src="${item.Thumbnail}" alt="${item.Title}">
-                <h3>${item.Title}</h3>
-                <p><small>${item.Date || 'Undated'}</small></p>
-            </div>
-        `).join('');
+        gallery.innerHTML = items.map((item) => {
+            // We turn the item into a string so we can pass it safely to the function
+            const itemData = JSON.stringify(item).replace(/'/g, "&apos;");
+            return `
+                <div class="card" onclick='openModal(${itemData})'>
+                    <img src="${item.Thumbnail}" alt="${item.Title}">
+                    <h3>${item.Title}</h3>
+                    <p><small>${item.Date || 'Undated'}</small></p>
+                </div>
+            `;
+        }).join('');
     }
 
-    function openModal(index) {
-        const item = data[index];
+    function openModal(item) {
         document.getElementById('modalTitle').innerText = item.Title;
-        document.getElementById('modalImg').src = item.Thumbnail.replace('getthumbnail', 'getimage'); // Attempting a larger view
+        // Reverting to Thumbnail since 'getimage' was breaking
+        document.getElementById('modalImg').src = item.Thumbnail; 
         document.getElementById('modalLink').href = item.Link;
         
         const fields = [
@@ -97,7 +103,7 @@
         ];
 
         document.getElementById('modalMeta').innerHTML = fields
-            .filter(f => f.value && f.value !== 'None')
+            .filter(f => f.value && f.value !== 'None' && f.value !== '')
             .map(f => `<div class="meta-label">${f.label}</div><div>${f.value}</div>`)
             .join('');
 
@@ -110,11 +116,11 @@
     searchInput.addEventListener('input', e => {
         const term = e.target.value.toLowerCase();
         const filtered = data.filter(item => 
-            Object.values(item).some(val => val.toLowerCase().includes(term))
+            // This searches every single column for your term
+            Object.values(item).some(val => String(val).toLowerCase().includes(term))
         );
         display(filtered);
     });
 </script>
-
 </body>
 </html>
