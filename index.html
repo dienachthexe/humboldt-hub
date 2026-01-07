@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Humboldt History Hub</title>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f4; padding: 20px; }
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+        .card { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
+        .card img { max-width: 100%; height: auto; border-radius: 4px; }
+        h1 { color: #2c3e50; }
+        input { width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Humboldt History Hub: Palmquist-Yale</h1>
+    <input type="text" id="search" placeholder="Search photos (e.g. 'Eureka' or 'Logging')...">
+    <div class="gallery" id="gallery"></div>
+
+    <script>
+        const gallery = document.getElementById('gallery');
+        const searchInput = document.getElementById('search');
+        let data = [];
+
+        // Load the CSV the robot created
+        Papa.parse('master.csv', {
+            download: true, header: true,
+            complete: function(results) {
+                data = results.data.filter(row => row.Title);
+                display(data);
+            }
+        });
+
+        function display(items) {
+            gallery.innerHTML = items.map(item => `
+                <div class="card">
+                    <img src="${item.Thumbnail}" alt="${item.Title}">
+                    <p><strong>${item.Title}</strong></p>
+                    <p><small>${item.Date || 'No Date'}</small></p>
+                    <a href="${item.Link}" target="_blank">View in Archive</a>
+                </div>
+            `).join('');
+        }
+
+        searchInput.addEventListener('input', e => {
+            const term = e.target.value.toLowerCase();
+            const filtered = data.filter(item => 
+                item.Title.toLowerCase().includes(term) || 
+                (item.Creator && item.Creator.toLowerCase().includes(term))
+            );
+            display(filtered);
+        });
+    </script>
+</body>
+</html>
