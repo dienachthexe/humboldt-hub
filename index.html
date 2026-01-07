@@ -44,14 +44,16 @@
             `).join('');
         }
 
-        searchInput.addEventListener('input', e => {
-            const term = e.target.value.toLowerCase();
-            const filtered = data.filter(item => 
-                item.Title.toLowerCase().includes(term) || 
-                (item.Creator && item.Creator.toLowerCase().includes(term))
-            );
-            display(filtered);
-        });
+searchInput.addEventListener('input', e => {
+    const term = e.target.value.toLowerCase();
+    const filtered = data.filter(item => {
+        const title = (item.Title || "").toLowerCase();
+        const creator = (item.Creator || "").toLowerCase();
+        const date = (item.Date || "").toLowerCase();
+        return title.includes(term) || creator.includes(term) || date.includes(term);
+    });
+    display(filtered);
+});
     </script>
 </body>
 </html>
