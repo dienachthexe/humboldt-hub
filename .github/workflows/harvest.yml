@@ -1,4 +1,23 @@
-- name: Harvest 100 Palmquist Records
+name: Palmquist Yale Harvest
+on:
+  workflow_dispatch:
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Hub
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Sickle
+        run: pip install sickle
+
+      - name: Harvest 100 Palmquist Records
         run: |
           python -c "
           from sickle import Sickle
@@ -9,7 +28,6 @@
           
           with open('master.csv', 'w', newline='', encoding='utf-8') as f:
               writer = csv.writer(f)
-              # Expanded headers based on your schema mapping
               writer.writerow(['Title', 'Creator', 'Date', 'Description', 'Subject', 'Coverage', 'Rights', 'Thumbnail', 'Link'])
               
               for i, record in enumerate(records):
@@ -18,7 +36,6 @@
                   
                   system_id = record.header.identifier.split('/')[-1]
                   
-                  # CONTENTdm often returns lists for these; we join them with a semicolon
                   def get_all(field):
                       return ' ; '.join(m.get(field, []))
 
@@ -34,3 +51,10 @@
                       f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{system_id}'
                   ])
           "
+      - name: Save to GitHub
+        run: |
+          git config --global user.name 'humboldt-hub-robot'
+          git config --global user.email 'robot@humboldt-hub.local'
+          git add master.csv
+          git commit -m "Deep harvest of metadata for pop-up view"
+          git push
