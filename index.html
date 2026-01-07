@@ -6,54 +6,115 @@
     <title>Humboldt History Hub</title>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f4f4f4; padding: 20px; }
-        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
-        .card { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
-        .card img { max-width: 100%; height: auto; border-radius: 4px; }
-        h1 { color: #2c3e50; }
-        input { width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px; }
+        :root { --primary: #2c3e50; --accent: #27ae60; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        header { text-align: center; margin-bottom: 30px; }
+        h1 { color: var(--primary); }
+        
+        .search-container { max-width: 600px; margin: 0 auto 30px auto; }
+        #search { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 25px; font-size: 16px; outline: none; transition: border-color 0.3s; }
+        #search:focus { border-color: var(--accent); }
+
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-5px); }
+        .card img { width: 100%; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
+        .card h3 { font-size: 1rem; margin: 0; color: var(--primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); overflow-y: auto; }
+        .modal-content { background: white; margin: 5% auto; padding: 30px; width: 90%; max-width: 800px; border-radius: 15px; position: relative; display: flex; flex-direction: column; gap: 20px; }
+        @media (min-width: 600px) { .modal-content { flex-direction: row; } }
+        .close { position: absolute; right: 20px; top: 10px; font-size: 30px; cursor: pointer; color: #aaa; }
+        .modal-img { flex: 1; max-width: 100%; border-radius: 8px; align-self: flex-start; }
+        .modal-info { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        .modal-info h2 { margin-top: 0; color: var(--primary); }
+        .meta-label { font-weight: bold; color: #7f8c8d; text-transform: uppercase; font-size: 0.8rem; margin-top: 10px; }
+        .btn { display: inline-block; background: var(--accent); color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; text-align: center; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <h1>Humboldt History Hub: Palmquist-Yale</h1>
-    <input type="text" id="search" placeholder="Search photos (e.g. 'Eureka' or 'Logging')...">
-    <div class="gallery" id="gallery"></div>
 
-    <script>
-        const gallery = document.getElementById('gallery');
-        const searchInput = document.getElementById('search');
-        let data = [];
+<header>
+    <h1>Humboldt History Hub</h1>
+    <p>Palmquist-Yale Collection Search</p>
+    <div class="search-container">
+        <input type="text" id="search" placeholder="Search by title, subject, or description...">
+    </div>
+</header>
 
-        // Load the CSV the robot created
-        Papa.parse('master.csv', {
-            download: true, header: true,
-            complete: function(results) {
-                data = results.data.filter(row => row.Title);
-                display(data);
-            }
-        });
+<div class="gallery" id="gallery"></div>
 
-        function display(items) {
-            gallery.innerHTML = items.map(item => `
-                <div class="card">
-                    <img src="${item.Thumbnail}" alt="${item.Title}">
-                    <p><strong>${item.Title}</strong></p>
-                    <p><small>${item.Date || 'No Date'}</small></p>
-                    <a href="${item.Link}" target="_blank">View in Archive</a>
-                </div>
-            `).join('');
+<div id="itemModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <img id="modalImg" class="modal-img" src="" alt="Full view">
+        <div class="modal-info">
+            <h2 id="modalTitle"></h2>
+            <div id="modalMeta"></div>
+            <a id="modalLink" href="" target="_blank" class="btn">View Original in Archive</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    let data = [];
+    const gallery = document.getElementById('gallery');
+    const searchInput = document.getElementById('search');
+    const modal = document.getElementById('itemModal');
+
+    Papa.parse('master.csv', {
+        download: true, header: true, skipEmptyLines: true,
+        complete: function(results) {
+            data = results.data;
+            display(data);
         }
-
-searchInput.addEventListener('input', e => {
-    const term = e.target.value.toLowerCase();
-    const filtered = data.filter(item => {
-        const title = (item.Title || "").toLowerCase();
-        const creator = (item.Creator || "").toLowerCase();
-        const date = (item.Date || "").toLowerCase();
-        return title.includes(term) || creator.includes(term) || date.includes(term);
     });
-    display(filtered);
-});
-    </script>
+
+    function display(items) {
+        gallery.innerHTML = items.map((item, index) => `
+            <div class="card" onclick="openModal(${index})">
+                <img src="${item.Thumbnail}" alt="${item.Title}">
+                <h3>${item.Title}</h3>
+                <p><small>${item.Date || 'Undated'}</small></p>
+            </div>
+        `).join('');
+    }
+
+    function openModal(index) {
+        const item = data[index];
+        document.getElementById('modalTitle').innerText = item.Title;
+        document.getElementById('modalImg').src = item.Thumbnail.replace('getthumbnail', 'getimage'); // Attempting a larger view
+        document.getElementById('modalLink').href = item.Link;
+        
+        const fields = [
+            { label: 'Creator', value: item.Creator },
+            { label: 'Date', value: item.Date },
+            { label: 'Description', value: item.Description },
+            { label: 'Subjects', value: item.Subject },
+            { label: 'Coverage', value: item.Coverage },
+            { label: 'Rights', value: item.Rights }
+        ];
+
+        document.getElementById('modalMeta').innerHTML = fields
+            .filter(f => f.value && f.value !== 'None')
+            .map(f => `<div class="meta-label">${f.label}</div><div>${f.value}</div>`)
+            .join('');
+
+        modal.style.display = "block";
+    }
+
+    function closeModal() { modal.style.display = "none"; }
+    window.onclick = (event) => { if (event.target == modal) closeModal(); }
+
+    searchInput.addEventListener('input', e => {
+        const term = e.target.value.toLowerCase();
+        const filtered = data.filter(item => 
+            Object.values(item).some(val => val.toLowerCase().includes(term))
+        );
+        display(filtered);
+    });
+</script>
+
 </body>
 </html>
