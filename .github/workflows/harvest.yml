@@ -1,4 +1,4 @@
-name: Palmquist Yale Harvest
+name: Palmquist & Finding Aids Harvest
 on:
   workflow_dispatch:
 
@@ -17,44 +17,71 @@ jobs:
       - name: Install Sickle
         run: pip install sickle
 
-      - name: Harvest 100 Palmquist Records
+      - name: Run Dual Harvest
         run: |
           python -c "
           from sickle import Sickle
           import csv
+          import xml.etree.ElementTree as ET
           
+          # --- PART 1: CONTENTdm HARVEST ---
           sickle = Sickle('https://cdm16166.contentdm.oclc.org/oai/oai.php')
           records = sickle.ListRecords(metadataPrefix='oai_dc', set='palmquistyale', ignore_deleted=True)
           
+          all_data = []
+          for i, record in enumerate(records):
+              if i >= 100: break
+              m = record.metadata
+              system_id = record.header.identifier.split('/')[-1]
+              
+              all_data.append([
+                  ' ; '.join(m.get('title', [])),
+                  ' ; '.join(m.get('creator', [])),
+                  ' ; '.join(m.get('date', [])),
+                  ' ; '.join(m.get('description', [])),
+                  ' ; '.join(m.get('subject', [])),
+                  ' ; '.join(m.get('coverage', [])),
+                  ' ; '.join(m.get('rights', [])),
+                  f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{system_id}',
+                  f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{system_id}'
+              ])
+
+          # --- PART 2: MARCXML HARVEST ---
+          ns = {'marc': 'http://www.loc.gov/MARC21/slim'}
+          # Make sure this matches your filename exactly!
+          tree = ET.parse('finding-aids.xml')
+          root = tree.getroot()
+          
+          for record in root.findall('.//marc:record', ns):
+              # Get Title (245 $a)
+              t_field = record.find(\".//marc:datafield[@tag='245']\", ns)
+              title = t_field.find(\"marc:subfield[@code='a']\", ns).text if t_field is not None else 'Unknown Finding Aid'
+              
+              # Get MMS ID (001) for the link
+              mms_id = record.find(\".//marc:controlfield[@tag='001']\", ns).text
+              
+              # Get Summary (520 $a)
+              d_field = record.find(\".//marc:datafield[@tag='520']\", ns)
+              desc = d_field.find(\"marc:subfield[@code='a']\", ns).text if d_field is not None else 'Archival collection finding aid.'
+              
+              # Build the Primo Link
+              link = f'https://hsu-primo.hosted.exlibrisgroup.com/discovery/fulldisplay?docid=alma{mms_id}&vid=01CALS_HUL:HUL'
+              
+              # Use a Folder Icon for finding aids
+              icon = 'https://img.icons8.com/color/96/folder-invoices--v1.png'
+              
+              all_data.append([title, 'Archives', 'Multiple Dates', desc, 'Finding Aid', 'Humboldt County', 'Check Finding Aid for Rights', icon, link])
+
+          # --- PART 3: SAVE TO CSV ---
           with open('master.csv', 'w', newline='', encoding='utf-8') as f:
               writer = csv.writer(f)
               writer.writerow(['Title', 'Creator', 'Date', 'Description', 'Subject', 'Coverage', 'Rights', 'Thumbnail', 'Link'])
-              
-              for i, record in enumerate(records):
-                  if i >= 100: break
-                  m = record.metadata
-                  
-                  system_id = record.header.identifier.split('/')[-1]
-                  
-                  def get_all(field):
-                      return ' ; '.join(m.get(field, []))
-
-                  writer.writerow([
-                      get_all('title'),
-                      get_all('creator'),
-                      get_all('date'),
-                      get_all('description'),
-                      get_all('subject'),
-                      get_all('coverage'),
-                      get_all('rights'),
-                      f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{system_id}',
-                      f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{system_id}'
-                  ])
+              writer.writerows(all_data)
           "
       - name: Save to GitHub
         run: |
           git config --global user.name 'humboldt-hub-robot'
           git config --global user.email 'robot@humboldt-hub.local'
           git add master.csv
-          git commit -m "Deep harvest of metadata for pop-up view"
+          git commit -m "Merged Finding Aids and Photos"
           git push
