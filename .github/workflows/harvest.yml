@@ -1,4 +1,4 @@
-name: Palmquist & Finding Aids Harvest
+name: Palmquist & Finding Aids & Oral History Harvest
 on:
   workflow_dispatch:
 
@@ -17,7 +17,7 @@ jobs:
       - name: Install Sickle
         run: pip install sickle
 
-      - name: Run Dual Harvest
+      - name: Run Triple Harvest
         run: |
           python -c "
           from sickle import Sickle
@@ -27,17 +27,15 @@ jobs:
           
           all_data = []
 
-          # --- PART 1: CONTENTdm HARVEST ---
+          # --- PART 1: CONTENTdm (Photos) ---
           print('Starting CONTENTdm harvest...')
           try:
-              sickle = Sickle('https://cdm16166.contentdm.oclc.org/oai/oai.php')
-              records = sickle.ListRecords(metadataPrefix='oai_dc', set='palmquistyale', ignore_deleted=True)
-              
+              sickle_cdm = Sickle('https://cdm16166.contentdm.oclc.org/oai/oai.php')
+              records = sickle_cdm.ListRecords(metadataPrefix='oai_dc', set='palmquistyale', ignore_deleted=True)
               for i, record in enumerate(records):
                   if i >= 100: break
                   m = record.metadata
-                  system_id = record.header.identifier.split('/')[-1]
-                  
+                  sid = record.header.identifier.split('/')[-1]
                   all_data.append([
                       ' ; '.join(m.get('title', [])),
                       ' ; '.join(m.get('creator', [])),
@@ -46,23 +44,55 @@ jobs:
                       ' ; '.join(m.get('subject', [])),
                       ' ; '.join(m.get('coverage', [])),
                       ' ; '.join(m.get('rights', [])),
-                      f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{system_id}',
-                      f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{system_id}'
+                      f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{sid}',
+                      f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{sid}'
                   ])
               print(f'Successfully harvested {len(all_data)} photos.')
           except Exception as e:
-              print(f'Notice: CONTENTdm harvest skipped or failed: {e}')
+              print(f'CONTENTdm Error: {e}')
 
-          # --- PART 2: MARCXML HARVEST ---
+          # --- PART 2: DigitalCommons (Old Timers Oral Histories) ---
+          print('Starting DigitalCommons harvest...')
+          try:
+              sickle_dc = Sickle('https://digitalcommons.humboldt.edu/do/oai/')
+              dc_records = sickle_dc.ListRecords(metadataPrefix='oai_dc', set='publication:old_timers', ignore_deleted=True)
+              
+              dc_count = 0
+              for record in dc_records:
+                  m = record.metadata
+                  # Mapping: Use the 'Interview of...' text from description as Title if available
+                  descriptions = m.get('description', [])
+                  formal_title = m.get('title', [''])[0]
+                  display_title = next((d for d in descriptions if 'Interview' in d), formal_title)
+                  
+                  # Links and Thumbnails
+                  ids = m.get('identifier', [])
+                  link = next((i for i in ids if 'digitalcommons.humboldt.edu/old_timers/' in i and 'thumbnail' not in i), '')
+                  thumb = next((i for i in ids if 'thumbnail.jpg' in i), 'https://img.icons8.com/color/96/microphone.png')
+                  
+                  all_data.append([
+                      display_title,
+                      ' ; '.join(m.get('creator', [])),
+                      ' ; '.join(m.get('date', [])),
+                      ' ; '.join(descriptions),
+                      'Oral History ; ' + ' ; '.join(m.get('subject', [])),
+                      'DigitalCommons',
+                      'Cal Poly Humboldt Library',
+                      thumb,
+                      link
+                  ])
+                  dc_count += 1
+              print(f'Successfully harvested {dc_count} oral histories.')
+          except Exception as e:
+              print(f'DigitalCommons Error: {e}')
+
+          # --- PART 3: MARCXML (Finding Aids) ---
+          print('Starting MARCXML translation...')
           xml_files = glob.glob('finding*.xml')
-          if not xml_files:
-              print('ERROR: No XML file starting with finding found!')
-          else:
+          if xml_files:
               target_file = xml_files[0]
-              print(f'Found XML file: {target_file}. Starting translation...')
               tree = ET.parse(target_file)
               root = tree.getroot()
-              
               marcs = root.findall('.//record')
               if not marcs:
                   ns = {'m': 'http://www.loc.gov/MARC21/slim'}
@@ -85,14 +115,13 @@ jobs:
                       d_sub = d_field.find(\"subfield[@code='a']\")
                       if d_sub is not None: desc = d_sub.text
                   
-                  # UPDATED PRIMO PERMALINK STRUCTURE
                   link = f'https://csu-humboldt.primo.exlibrisgroup.com/permalink/01CALS_HUL/omcour/alma{mms_id}'
                   icon = 'https://img.icons8.com/color/96/folder-invoices--v1.png'
                   
                   all_data.append([title, 'Archives', 'Multiple Dates', desc, 'Finding Aid', 'Humboldt County', 'Check Finding Aid for Rights', icon, link])
               print(f'Successfully added {len(marcs)} finding aids.')
 
-          # --- PART 3: SAVE TO CSV ---
+          # --- PART 4: SAVE TO CSV ---
           with open('master.csv', 'w', newline='', encoding='utf-8') as f:
               writer = csv.writer(f)
               writer.writerow(['Title', 'Creator', 'Date', 'Description', 'Subject', 'Coverage', 'Rights', 'Thumbnail', 'Link'])
@@ -103,5 +132,5 @@ jobs:
           git config --global user.name 'humboldt-hub-robot'
           git config --global user.email 'robot@humboldt-hub.local'
           git add master.csv
-          git commit -m "Merged Finding Aids and Photos with corrected Permalink URL" || exit 0
+          git commit -m "Triple Harvest: CDM, DC, and MARCXML" || exit 0
           git push
