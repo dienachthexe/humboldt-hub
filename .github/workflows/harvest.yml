@@ -28,7 +28,6 @@ jobs:
           all_data = []
 
           # --- PART 1: CONTENTdm (Photos) ---
-          print('Harvesting CONTENTdm...')
           try:
               sickle_cdm = Sickle('https://cdm16166.contentdm.oclc.org/oai/oai.php')
               records = sickle_cdm.ListRecords(metadataPrefix='oai_dc', set='palmquistyale', ignore_deleted=True)
@@ -36,9 +35,9 @@ jobs:
                   if i >= 100: break
                   m = record.metadata
                   sid = record.header.identifier.split('/')[-1]
-                  # JOINING ALL FIELDS WITH SPACES FOR SEARCHABILITY
+                  # ALL fields joined by space for tokenization
                   all_data.append([
-                      ' '.join(m.get('title', [])),
+                      ' '.join(m.get('title', [])).replace(':', '').strip(),
                       ' '.join(m.get('creator', [])),
                       ' '.join(m.get('date', [])),
                       ' '.join(m.get('description', [])),
@@ -51,7 +50,6 @@ jobs:
           except Exception as e: print(f'CONTENTdm Error: {e}')
 
           # --- PART 2: DigitalCommons (Oral Histories) ---
-          print('Harvesting DigitalCommons...')
           try:
               sickle_dc = Sickle('https://digitalcommons.humboldt.edu/do/oai/')
               dc_records = sickle_dc.ListRecords(metadataPrefix='oai_dc', set='publication:old_timers', ignore_deleted=True)
@@ -59,8 +57,7 @@ jobs:
                   m = record.metadata
                   desc_list = m.get('description', [])
                   formal_title = m.get('title', [''])[0]
-                  # Better Title: Pick the one that says 'Interview of...'
-                  display_title = next((d for d in desc_list if 'Interview' in d), formal_title)
+                  display_title = next((d for d in desc_list if 'Interview' in d), formal_title).replace(':', '').strip()
                   
                   ids = m.get('identifier', [])
                   link = next((i for i in ids if 'digitalcommons.humboldt.edu/old_timers/' in i and 'thumbnail' not in i), '')
@@ -70,7 +67,7 @@ jobs:
                       display_title,
                       ' '.join(m.get('creator', [])),
                       ' '.join(m.get('date', [])),
-                      ' '.join(desc_list),
+                      ' '.join(desc_list), # Full description now searchable
                       'Oral History ' + ' '.join(m.get('subject', [])),
                       'DigitalCommons',
                       'Cal Poly Humboldt Library',
@@ -80,11 +77,9 @@ jobs:
           except Exception as e: print(f'DigitalCommons Error: {e}')
 
           # --- PART 3: MARCXML (Finding Aids) ---
-          print('Harvesting Finding Aids...')
           xml_files = glob.glob('finding*.xml')
           if xml_files:
-              target_file = xml_files[0]
-              tree = ET.parse(target_file)
+              tree = ET.parse(xml_files[0])
               root = tree.getroot()
               marcs = root.findall('.//record') or root.findall('.//{http://www.loc.gov/MARC21/slim}record')
               for record in marcs:
@@ -93,19 +88,24 @@ jobs:
                   if t_field is not None:
                       a = t_field.find(\"./*[@code='a']\")
                       b = t_field.find(\"./*[@code='b']\")
-                      title = f\"{a.text if a is not None else ''} {b.text if b is not None else ''}\".strip()
+                      title = f\"{a.text if a is not None else ''} {b.text if b is not None else ''}\".replace(':', '').strip()
+                  
+                  # Subject Expansion (600, 610, 650, 651) for keyword richness
+                  subjects = []
+                  for tag in ['600', '610', '650', '651']:
+                      fields = record.findall(f\".//*[@tag='{tag}']\")
+                      for f in fields:
+                          subfields = f.findall(\"./*[@code='a']\")
+                          subjects.extend([sf.text for sf in subfields if sf.text])
                   
                   id_f = record.find(\".//*[@tag='001']\")
                   mms_id = id_f.text if id_f is not None else '0'
-                  
                   d_field = record.find(\".//*[@tag='520']\")
                   desc = d_field.find(\"./*[@code='a']\").text if d_field is not None else 'Archival collection finding aid.'
                   
                   link = f'https://csu-humboldt.primo.exlibrisgroup.com/permalink/01CALS_HUL/omcour/alma{mms_id}'
-                  icon = 'https://img.icons8.com/color/96/folder-invoices--v1.png'
-                  all_data.append([title, 'Archives', 'Multiple Dates', desc, 'Finding Aid', 'Humboldt County', 'Check Finding Aid for Rights', icon, link])
+                  all_data.append([title, 'Archives', 'Multiple Dates', desc, ' '.join(subjects), 'Finding Aid', 'Rights Reserved', 'https://img.icons8.com/color/96/folder-invoices--v1.png', link])
 
-          # --- PART 4: SAVE ---
           with open('master.csv', 'w', newline='', encoding='utf-8') as f:
               writer = csv.writer(f)
               writer.writerow(['Title', 'Creator', 'Date', 'Description', 'Subject', 'Coverage', 'Rights', 'Thumbnail', 'Link'])
@@ -116,5 +116,5 @@ jobs:
           git config --global user.name 'humboldt-hub-robot'
           git config --global user.email 'robot@humboldt-hub.local'
           git add master.csv
-          git commit -m "Full CSV Keyword Search Optimization" || exit 0
+          git commit -m "Global keyword search optimization for all fields" || exit 0
           git push
