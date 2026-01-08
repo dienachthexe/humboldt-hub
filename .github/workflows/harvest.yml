@@ -1,4 +1,4 @@
-name: Palmquist & Finding Aids & Oral History Harvest
+name: Automagical Multi-Collection Harvest
 on:
   workflow_dispatch:
 
@@ -17,7 +17,7 @@ jobs:
       - name: Install Sickle
         run: pip install sickle
 
-      - name: Run Triple Harvest
+      - name: Run Automagical Harvest
         run: |
           python -c "
           from sickle import Sickle
@@ -26,8 +26,45 @@ jobs:
           import glob
           
           all_data = []
+          
+          # 1. THE BLACKLISTS
+          pattern_blacklist = ['ellenadornews', 'theosprey', 'lumberjack']
+          exact_blacklist = ['publication:senior_projects', 'publication:hcapc_aerial'] 
 
-          # --- PART 1: CONTENTdm (Photos) ---
+          # --- PART 1: DigitalCommons (Auto-Discovery) ---
+          try:
+              sickle_dc = Sickle('https://digitalcommons.humboldt.edu/do/oai/')
+              all_sets = sickle_dc.ListSets()
+              for s in all_sets:
+                  sid = s.setSpec.lower()
+                  if 'studentnewspaper' in sid and sid != 'publication:studentnewspaper': continue
+                  if any(p in sid for p in pattern_blacklist): continue
+                  if sid in exact_blacklist: continue
+                  
+                  if 'publication:' in sid:
+                      print(f'Harvesting DC: {s.setName}')
+                      try:
+                          records = sickle_dc.ListRecords(metadataPrefix='oai_dc', set=sid, ignore_deleted=True)
+                          for i, record in enumerate(records):
+                              if i >= 50: break 
+                              m = record.metadata
+                              subjects = []
+                              for sub in m.get('subject', []):
+                                  subjects.extend([item.strip() for item in sub.split(',')])
+                              
+                              all_data.append([
+                                  ' ; '.join(m.get('title', [])).replace(':', '').strip(),
+                                  ' ; '.join(m.get('creator', []) + m.get('contributor', [])),
+                                  ' ; '.join(m.get('description', [])),
+                                  ' ; '.join(list(set(subjects))),
+                                  'DigitalCommons', 'Cal Poly Humboldt',
+                                  next((id for id in m.get('identifier', []) if 'thumbnail.jpg' in id), 'https://img.icons8.com/color/96/document.png'),
+                                  next((id for id in m.get('identifier', []) if 'digitalcommons.humboldt.edu' in id and 'thumbnail' not in id), '')
+                              ])
+                      except Exception: pass
+          except Exception as e: print(f'DC Error: {e}')
+
+          # --- PART 2: CONTENTdm ---
           try:
               sickle_cdm = Sickle('https://cdm16166.contentdm.oclc.org/oai/oai.php')
               records = sickle_cdm.ListRecords(metadataPrefix='oai_dc', set='palmquistyale', ignore_deleted=True)
@@ -35,80 +72,41 @@ jobs:
                   if i >= 100: break
                   m = record.metadata
                   sid = record.header.identifier.split('/')[-1]
-                  # ALL fields joined by space for tokenization
                   all_data.append([
-                      ' '.join(m.get('title', [])).replace(':', '').strip(),
-                      ' '.join(m.get('creator', [])),
-                      ' '.join(m.get('date', [])),
-                      ' '.join(m.get('description', [])),
-                      ' '.join(m.get('subject', [])),
-                      ' '.join(m.get('coverage', [])),
-                      ' '.join(m.get('rights', [])),
+                      ' ; '.join(m.get('title', [])).replace(':', '').strip(),
+                      ' ; '.join(m.get('creator', [])),
+                      ' ; '.join(m.get('description', [])),
+                      ' ; '.join(m.get('subject', [])),
+                      'CONTENTdm', 'Cal Poly Humboldt',
                       f'https://cdm16166.contentdm.oclc.org/utils/getthumbnail/collection/palmquistyale/id/{sid}',
                       f'https://cdm16166.contentdm.oclc.org/digital/collection/palmquistyale/id/{sid}'
                   ])
-          except Exception as e: print(f'CONTENTdm Error: {e}')
-
-          # --- PART 2: DigitalCommons (Oral Histories) ---
-          try:
-              sickle_dc = Sickle('https://digitalcommons.humboldt.edu/do/oai/')
-              dc_records = sickle_dc.ListRecords(metadataPrefix='oai_dc', set='publication:old_timers', ignore_deleted=True)
-              for record in dc_records:
-                  m = record.metadata
-                  desc_list = m.get('description', [])
-                  formal_title = m.get('title', [''])[0]
-                  display_title = next((d for d in desc_list if 'Interview' in d), formal_title).replace(':', '').strip()
-                  
-                  ids = m.get('identifier', [])
-                  link = next((i for i in ids if 'digitalcommons.humboldt.edu/old_timers/' in i and 'thumbnail' not in i), '')
-                  thumb = next((i for i in ids if 'thumbnail.jpg' in i), 'https://img.icons8.com/color/96/microphone.png')
-                  
-                  all_data.append([
-                      display_title,
-                      ' '.join(m.get('creator', [])),
-                      ' '.join(m.get('date', [])),
-                      ' '.join(desc_list), # Full description now searchable
-                      'Oral History ' + ' '.join(m.get('subject', [])),
-                      'DigitalCommons',
-                      'Cal Poly Humboldt Library',
-                      thumb,
-                      link
-                  ])
-          except Exception as e: print(f'DigitalCommons Error: {e}')
+          except Exception: pass
 
           # --- PART 3: MARCXML (Finding Aids) ---
-          xml_files = glob.glob('finding*.xml')
-          if xml_files:
-              tree = ET.parse(xml_files[0])
+          for xml_file in glob.glob('finding*.xml'):
+              tree = ET.parse(xml_file)
               root = tree.getroot()
               marcs = root.findall('.//record') or root.findall('.//{http://www.loc.gov/MARC21/slim}record')
               for record in marcs:
                   t_field = record.find(\".//*[@tag='245']\")
-                  title = 'Unknown Finding Aid'
-                  if t_field is not None:
-                      a = t_field.find(\"./*[@code='a']\")
-                      b = t_field.find(\"./*[@code='b']\")
-                      title = f\"{a.text if a is not None else ''} {b.text if b is not None else ''}\".replace(':', '').strip()
-                  
-                  # Subject Expansion (600, 610, 650, 651) for keyword richness
+                  title = ' '.join([sf.text for sf in t_field.findall('./*') if sf.text]) if t_field is not None else 'Unknown'
                   subjects = []
                   for tag in ['600', '610', '650', '651']:
-                      fields = record.findall(f\".//*[@tag='{tag}']\")
-                      for f in fields:
-                          subfields = f.findall(\"./*[@code='a']\")
-                          subjects.extend([sf.text for sf in subfields if sf.text])
+                      for f in record.findall(f\".//*[@tag='{tag}']\"):
+                          subjects.extend([sf.text for sf in f.findall(\"./*[@code='a']\") if sf.text])
                   
                   id_f = record.find(\".//*[@tag='001']\")
                   mms_id = id_f.text if id_f is not None else '0'
                   d_field = record.find(\".//*[@tag='520']\")
                   desc = d_field.find(\"./*[@code='a']\").text if d_field is not None else 'Archival collection finding aid.'
-                  
                   link = f'https://csu-humboldt.primo.exlibrisgroup.com/permalink/01CALS_HUL/omcour/alma{mms_id}'
-                  all_data.append([title, 'Archives', 'Multiple Dates', desc, ' '.join(subjects), 'Finding Aid', 'Rights Reserved', 'https://img.icons8.com/color/96/folder-invoices--v1.png', link])
+                  all_data.append([title.replace(':', '').strip(), 'Archives', desc, ' ; '.join(subjects), 'Alma', 'Humboldt Special Collections', 'https://img.icons8.com/color/96/folder-invoices--v1.png', link])
 
+          # --- PART 4: SAVE ---
           with open('master.csv', 'w', newline='', encoding='utf-8') as f:
               writer = csv.writer(f)
-              writer.writerow(['Title', 'Creator', 'Date', 'Description', 'Subject', 'Coverage', 'Rights', 'Thumbnail', 'Link'])
+              writer.writerow(['Title', 'Creator', 'Description', 'Subject', 'Source', 'Publisher', 'Thumbnail', 'Link'])
               writer.writerows(all_data)
           "
       - name: Save to GitHub
@@ -116,5 +114,5 @@ jobs:
           git config --global user.name 'humboldt-hub-robot'
           git config --global user.email 'robot@humboldt-hub.local'
           git add master.csv
-          git commit -m "Global keyword search optimization for all fields" || exit 0
+          git commit -m "Full Automagical pipeline - No Date field" || exit 0
           git push
