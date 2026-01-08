@@ -27,24 +27,68 @@ jobs:
           
           all_data = []
           
-          # 1. THE BLACKLISTS
-          pattern_blacklist = ['ellenadornews', 'theosprey', 'lumberjack']
-          exact_blacklist = ['publication:senior_projects', 'publication:hcapc_aerial'] 
+          # 1. THE PATTERN BLACKLIST
+          # Only these three specific series use pattern matching to catch future years.
+          pattern_list = ['studentnewspaper', 'ellenadornews', 'ideafest']
 
-          # --- PART 1: DigitalCommons (Auto-Discovery) ---
+          # 2. THE EXACT LIST (Transcribed from your provided list)
+          # These are exact matches. If the setSpec is exactly this, it is skipped.
+          exact_blacklist = [
+              'booger', 'botany_jps', 'cahssnews', 'capstone', 'careercurriculumconnections',
+              'ccv', 'chanterelle', 'clubnews', 'comm300', 'conferences', 'contaminated_sites',
+              'courageouscuentos', 'creative_pub', 'crp', 'csucompetitionvideos', 
+              'csuglobalaction', 'csuglobaljournal', 'culturaltimes', 'data', 'digitallab',
+              'esmproject', 'etd', 'etd_slideshow', 'faculty', 'facultypub', 'fiction',
+              'foodfutures', 'gradnews', 'gradslam', 'gspproject', 'h5ii', 'hb_infrastructure',
+              'hb_sustainability', 'hcapc', 'hcapc_aerial', 'hcapc_index', 'herbarium_photos',
+              'histpaper', 'hjm', 'hjsr', 'hjsrvideo', 'homepage_gallery', 'hsuslri', 
+              'hsuslri_geospatial', 'hsuslri_local', 'hsuslri_presentations', 'hsuslri_state',
+              'hsuslri_student', 'humboldtgeographic', 'humnews', 'ideafest-events', 'ije',
+              'inrsep_posters', 'internationalnews', 'interviews', 'isfsi', 'isfsi_geospatial',
+              'isfsi_local', 'isfsi_presentations', 'isfsi_state', 'isfsi_student', 'journals',
+              'jscc_conference', 'jscc_student', 'librarian', 'library_pub', 'librarypub',
+              'math', 'monographs', 'msw', 'oceanogrpahypub', 'odeinews', 'oer', 
+              'oer_sustainability', 'open_ed', 'pelicanbayresearchjournal', 'personas',
+              'physicssims', 'politics', 'polyarc', 'posters', 'pracademics', 'press',
+              'projectrebound', 'projects', 'proposals', 'rectourism', 'reprint', 'rr', 'rrv',
+              'rspnews', 'rwc', 'senior_cd', 'senior_comm', 'senior_crgs', 'senior_esm',
+              'senior_ffrm', 'senior_hist', 'senior_math', 'senior_soc', 'sotl_ip', 'student',
+              'studentcomm', 'studenthist', 'studentresearchbio', 'studentscholar', 
+              'sustainability', 'telonichernews', 'textbooks', 'theosprey', 'theosprey1970s',
+              'theosprey1980s', 'theosprey1990s', 'theosprey2000s', 'theosprey2010s', 
+              'theosprey2020s', 'toyon', 'toyonv', 'unconference', 'wildlife_posters', 
+              'world', 'worlddahs', 'worlddahsimages', 'worlddahsimages-2019-2020', 
+              'worldwlc', 'worldwlcimages', 'worldwlcimages-2019-2020', 'worldwlcimages-sp19', 
+              'wrrap', 'xavhumboldt', 'yesv', 'zerowaste'
+          ] 
+
+          # --- PART 1: DigitalCommons ---
           try:
               sickle_dc = Sickle('https://digitalcommons.humboldt.edu/do/oai/')
               all_sets = sickle_dc.ListSets()
+              
               for s in all_sets:
-                  sid = s.setSpec.lower()
-                  if 'studentnewspaper' in sid and sid != 'publication:studentnewspaper': continue
-                  if any(p in sid for p in pattern_blacklist): continue
-                  if sid in exact_blacklist: continue
+                  # Standardize ID (strip 'publication:' prefix if present for matching)
+                  full_sid = s.setSpec.lower()
+                  short_sid = full_sid.replace('publication:', '')
                   
-                  if 'publication:' in sid:
-                      print(f'Harvesting DC: {s.setName}')
+                  # PATTERN LOGIC: Check for our three specific year-based patterns
+                  is_pattern_match = any(p in short_sid for p in pattern_list)
+                  
+                  # EXCEPTION: Protect the parent collections even if they match the pattern
+                  is_protected_parent = short_sid in ['studentnewspaper', 'ellenador', 'ideafest']
+                  
+                  if is_pattern_match and not is_protected_parent:
+                      continue
+
+                  # EXACT LIST LOGIC: Check against your specific list
+                  if short_sid in exact_blacklist:
+                      continue
+                  
+                  if 'publication:' in full_sid:
+                      print(f'Harvesting: {s.setName}')
                       try:
-                          records = sickle_dc.ListRecords(metadataPrefix='oai_dc', set=sid, ignore_deleted=True)
+                          records = sickle_dc.ListRecords(metadataPrefix='oai_dc', set=full_sid, ignore_deleted=True)
                           for i, record in enumerate(records):
                               if i >= 50: break 
                               m = record.metadata
@@ -83,7 +127,7 @@ jobs:
                   ])
           except Exception: pass
 
-          # --- PART 3: MARCXML (Finding Aids) ---
+          # --- PART 3: MARCXML ---
           for xml_file in glob.glob('finding*.xml'):
               tree = ET.parse(xml_file)
               root = tree.getroot()
@@ -95,7 +139,6 @@ jobs:
                   for tag in ['600', '610', '650', '651']:
                       for f in record.findall(f\".//*[@tag='{tag}']\"):
                           subjects.extend([sf.text for sf in f.findall(\"./*[@code='a']\") if sf.text])
-                  
                   id_f = record.find(\".//*[@tag='001']\")
                   mms_id = id_f.text if id_f is not None else '0'
                   d_field = record.find(\".//*[@tag='520']\")
@@ -114,5 +157,5 @@ jobs:
           git config --global user.name 'humboldt-hub-robot'
           git config --global user.email 'robot@humboldt-hub.local'
           git add master.csv
-          git commit -m "Full Automagical pipeline - No Date field" || exit 0
+          git commit -m "Final Precision Blacklist Run" || exit 0
           git push
