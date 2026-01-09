@@ -9,17 +9,20 @@
         :root { --primary: #2c3e50; --accent: #27ae60; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
         header { text-align: center; margin-bottom: 30px; }
-        h1 { color: var(--primary); }
+        h1 { color: var(--primary); margin-bottom: 5px; }
         
-        .search-container { max-width: 600px; margin: 0 auto 30px auto; }
+        .search-container { max-width: 600px; margin: 0 auto 10px auto; }
         #search { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 25px; font-size: 16px; outline: none; transition: border-color 0.3s; }
         #search:focus { border-color: var(--accent); }
+        
+        #counter { text-align: center; color: #7f8c8d; font-size: 0.9rem; margin-bottom: 20px; min-height: 1.2em; }
 
         .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s; }
         .card:hover { transform: translateY(-5px); }
         .card img { width: 100%; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
         .card h3 { font-size: 1rem; margin: 0; color: var(--primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .card p { margin: 5px 0 0 0; color: #7f8c8d; }
 
         /* Modal Styles */
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); overflow-y: auto; }
@@ -37,10 +40,11 @@
 
 <header>
     <h1>Humboldt History Hub</h1>
-    <p>Palmquist-Yale Collection Search</p>
+    <p>Cal Poly Humboldt Special Collections & Archives</p>
     <div class="search-container">
         <input type="text" id="search" placeholder="Search by title, subject, or description...">
     </div>
+    <div id="counter">Loading records...</div>
 </header>
 
 <div class="gallery" id="gallery"></div>
@@ -62,6 +66,7 @@
     const gallery = document.getElementById('gallery');
     const searchInput = document.getElementById('search');
     const modal = document.getElementById('itemModal');
+    const counter = document.getElementById('counter');
 
     // Load the CSV
     Papa.parse('master.csv', {
@@ -72,16 +77,17 @@
         }
     });
 
-    // We pass the "filtered" data here so it always stays in sync
     function display(items) {
+        // Update the counter text
+        counter.innerText = `Showing ${items.length} of ${data.length} records`;
+        
         gallery.innerHTML = items.map((item) => {
-            // We turn the item into a string so we can pass it safely to the function
             const itemData = JSON.stringify(item).replace(/'/g, "&apos;");
             return `
                 <div class="card" onclick='openModal(${itemData})'>
                     <img src="${item.Thumbnail}" alt="${item.Title}">
                     <h3>${item.Title}</h3>
-                    <p><small>${item.Date || 'Undated'}</small></p>
+                    <p><small>${item.Source}</small></p>
                 </div>
             `;
         }).join('');
@@ -89,17 +95,15 @@
 
     function openModal(item) {
         document.getElementById('modalTitle').innerText = item.Title;
-        // Reverting to Thumbnail since 'getimage' was breaking
         document.getElementById('modalImg').src = item.Thumbnail; 
         document.getElementById('modalLink').href = item.Link;
         
         const fields = [
             { label: 'Creator', value: item.Creator },
-            { label: 'Date', value: item.Date },
             { label: 'Description', value: item.Description },
             { label: 'Subjects', value: item.Subject },
-            { label: 'Coverage', value: item.Coverage },
-            { label: 'Rights', value: item.Rights }
+            { label: 'Collection Source', value: item.Source },
+            { label: 'Publisher', value: item.Publisher }
         ];
 
         document.getElementById('modalMeta').innerHTML = fields
@@ -113,12 +117,25 @@
     function closeModal() { modal.style.display = "none"; }
     window.onclick = (event) => { if (event.target == modal) closeModal(); }
 
+    // UPGARDED SMART SEARCH
     searchInput.addEventListener('input', e => {
-        const term = e.target.value.toLowerCase();
-        const filtered = data.filter(item => 
-            // This searches every single column for your term
-            Object.values(item).some(val => String(val).toLowerCase().includes(term))
-        );
+        // Split search into individual words (tokens)
+        const searchTerms = e.target.value.toLowerCase().trim().split(/\s+/);
+        
+        // If search is empty, show everything
+        if (searchTerms[0] === "") {
+            display(data);
+            return;
+        }
+
+        const filtered = data.filter(item => {
+            // Combine all field values into one string to search against
+            const searchableText = Object.values(item).join(" ").toLowerCase();
+            
+            // Logic: The item must contain EVERY word typed in the search box (AND logic)
+            return searchTerms.every(term => searchableText.includes(term));
+        });
+        
         display(filtered);
     });
 </script>
