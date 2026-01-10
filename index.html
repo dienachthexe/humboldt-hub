@@ -2,143 +2,160 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Humboldt History Hub</title>
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Humboldt History Hub</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+  <style>
+    :root { --primary:#2c3e50; --accent:#27ae60; }
+    body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#f7f9fb; margin:0; padding:20px; }
+    header { text-align:center; margin-bottom:16px; }
+    h1 { color:var(--primary); margin:0 0 4px 0; }
+    .search-container { max-width:720px; margin:10px auto; }
+    #search { width:100%; padding:12px; border:2px solid #ddd; border-radius:24px; font-size:16px; outline:none; }
+    #search:focus { border-color:var(--accent); }
+    #counter { text-align:center; color:#7f8c8d; font-size:0.9rem; margin:8px 0 16px; }
 
-    <style>
-        :root { --primary: #2c3e50; --accent: #27ae60; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        header { text-align: center; margin-bottom: 30px; }
-        h1 { color: var(--primary); margin-bottom: 5px; }
+    /* Results list (catalog style) */
+    .results { max-width:1000px; margin:0 auto; display:flex; flex-direction:column; gap:10px; }
+    .result {
+      display:grid;
+      grid-template-columns: 100px 1fr;
+      gap:12px; align-items:start;
+      background:#fff; border:1px solid #e7eaef; border-radius:10px; padding:10px;
+    }
+    .thumb { width:100px; height:80px; object-fit:cover; border-radius:6px; background:#eef1f5; }
+    .title { margin:0; font-size:1rem; color:#1f2d3d; line-height:1.3; }
+    .meta { margin-top:4px; color:#6b7785; font-size:0.9rem; }
+    .meta .chip { display:inline-block; margin-right:10px; }
 
-        .search-container { max-width: 600px; margin: 0 auto 10px auto; }
-        #search { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 25px; font-size: 16px; outline: none; transition: border-color 0.3s; }
-       -align: center; color: #7f8c8d; font-size: 0.9rem; margin-bottom: 20px; min-height: 1.2em; }
-
-        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
-        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s; }
-        .card:hover { transform: translateY(-5px); }
-        .card img { width: 100%; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
-        .card h3 { font-size: 1rem; margin: 0; color: var(--primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .card p { margin: 5px 0 0 0; color: #7f8c8d; }
-
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); overflow-y: auto; }
-        .modal-content { background: white; margin: 5% auto; padding: 30px; width: 90%; max-width: 800px; border-radius: 15px; position: relative; display: flex; flex-direction: column; gap: 20px; }
-        @media (min-width: 600px) { .modal-content { flex-direction: row; } }
-        .close { position: absolute; right: 20px; top: 10px; font-size: 30px; cursor: pointer; color: #aaa; }
-        .modal-img { flex: 1; max-width: 100%; border-radius: 8px; align-self: flex-start; }
-        .modal-info { flex: 1; display: flex; flex-direction: column; gap: 10px; }
-        .modal-info h2 { margin-top: 0; color: var(--primary); }
-        .meta-label { font-weight: bold; color: #7f8c8d; text-transform: uppercase; font-size: 0.8rem; margin-top: 10px; }
-        .btn { display: inline-block; background: var(--accent); color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; text-align: center; margin-top: 20px; }
-    </style>
+    /* Modal */
+    .modal { display:none; position:fixed; z-index:1000; inset:0; background:rgba(0,0,0,0.75); }
+    .modal-content { background:#fff; margin:5% auto; padding:20px; width:90%; max-width:800px; border-radius:12px; position:relative; display:grid; grid-template-columns: 260px 1fr; gap:16px; }
+    .close { position:absolute; right:16px; top:10px; font-size:28px; cursor:pointer; color:#999; }
+    .modal-img { width:100%; height:200px; object-fit:contain; background:#f1f3f6; border-radius:8px; }
+    .modal-info h2 { margin:0 0 6px 0; color:#1f2d3d; }
+    .meta-label { font-weight:600; color:#6b7785; text-transform:uppercase; font-size:0.8rem; margin-top:10px; }
+    .btn { display:inline-block; background:var(--accent); color:#fff; padding:10px 16px; text-decoration:none; border-radius:6px; margin-top:12px; }
+  </style>
 </head>
-
 <body>
 
 <header>
-    <h1>Humboldt History Hub</h1>
-    <p>Cal Poly Humboldt Special Collections &amp; Archives</p>
-
-    <div class="search-container">
-        <input type="text" id="search" placeholder="Search by title, subject, or description...">
-    </div>
-
-    <div id="counter">Loading records...</div>
+  <h1>Humboldt History Hub</h1>
+  <p>Cal Poly Humboldt Special Collections &amp; Archives</p>
+  <div class="search-container">
+    <input id="search" type="text" placeholder="Search by title, subject, or description…"/>
+  </div>
+  <div id="counter">Loading records…</div>
 </header>
 
-<div class="gallery" id="gallery"></div>
+<div id="results" class="results"></div>
 
-<div id="itemModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="closeModal()">&times;</span>
-        <img id="modalImg" class="modal-img" src="" alt="Full view">
-
-        <div class="modal-info">
-            <h2 id="modalTitle"></h2>
-            <div id="modalMeta"></div>
-            <a id="modalLink" href="" target="_blank" class="btn">View Original in Archive</a>
-        </div>
+<!-- Modal -->
+<div id="itemModal" class="modal" aria-hidden="true">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <img id="modalImg" class="modal-img" src="" alt="Preview"/>
+    <div class="modal-info">
+      <h2 id="modalTitle"></h2>
+      <div id="modalMeta"></div>
+      <a id="modalLink" href="" target="_blank" rel="noopener" class="btn">View Original in Archive</a>
     </div>
+  </div>
 </div>
 
 <script>
-    let data = [];
-    const gallery = document.getElementById('gallery');
-    const searchInput = document.getElementById('search');
-    const modal = document.getElementById('itemModal');
-    const counter = document.getElementById('counter');
+  let data = [];
+  const elResults = document.getElementById('results');
+  const elCounter = document.getElementById('counter');
+  const elSearch = document.getElementById('search');
+  const modal = document.getElementById('itemModal');
 
-    // Load master.csv (produced by your GitHub Action)
-    Papa.parse('master.csv', {
-        download: true, header: true, skipEmptyLines: true,
-        complete: function(results) {
-            data = results.data;
-            display(data);
-        }
-    });
+  // Helpers
+  const normalizeYear = d => {
+    if (!d) return "";
+    const m = String(d).match(/(19|20)\d{2}/);  // first 4-digit year
+    return m ? m[0] : String(d);
+  };
+  const cleanDescription = desc => {
+    if (!desc) return "";
+    // Split on " ; " and remove URL-like parts (including .jpg)
+    const parts = String(desc).split(/\s*;\s*/).filter(p => !/^https?:\/\//i.test(p) && !/\.jpg$/i.test(p));
+    return parts.join(' ; ');
+  };
 
-    function display(items) {
-        counter.innerText = `Showing ${items.length} of ${data.length} records`;
-
-        gallery.innerHTML = items.map(item => {
-            const itemData = encodeURIComponent(JSON.stringify(item));
-            return `
-                <div class="card" onclick='openModal("${itemData}")'>
-                    <img src="${item.Thumbnail}" alt="${item.Title}">
-                    <h3>${item.Title}</h3>
-                    <p><small>${item.Institution}</small></p>
-                </div>
-            `;
-        }).join('');
+  // Load master.csv
+  Papa.parse('master.csv', {
+    download: true, header: true, skipEmptyLines: true,
+    complete: (results) => {
+      data = results.data.map(r => ({
+        Title: r.Title || "",
+        Description: cleanDescription(r.Description || ""),
+        Subject: r.Subject || "",
+        Date: normalizeYear(r.Date || ""),
+        Collection: r.Collection || "",
+        Institution: r.Institution || "",
+        Thumbnail: r.Thumbnail || "https://img.icons8.com/color/80/document.png",
+        Link: r.Link || ""
+      }));
+      render(data);
     }
+  });
 
-    function openModal(encoded) {
-        const item = JSON.parse(decodeURIComponent(encoded));
+  function render(items) {
+    elCounter.textContent = `Showing ${items.length} of ${data.length} records`;
 
-        document.getElementById('modalTitle').innerText = item.Title;
-        document.getElementById('modalImg').src = item.Thumbnail;
-        document.getElementById('modalLink').href = item.Link;
+    elResults.innerHTML = items.map(item => {
+      const payload = encodeURIComponent(JSON.stringify(item));
+      return `
+        <div class="result" onclick='openModal("${payload}")'>
+          <img class="thumb" src="${item.Thumbnail}" alt="thumbnail"/>
+          <div>
+            <h3 class="title">${item.Title || "(untitled)"}</h3>
+            <div class="meta">
+              <span class="chip"><strong>${item.Institution}</strong></span>
+              ${item.Collection ? `<span class="chip">Collection: ${item.Collection}</span>` : ""}
+              ${item.Date ? `<span class="chip">Date: ${item.Date}</span>` : ""}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
 
-        const fields = [
-            { label: 'Description', value: item.Description },
-            { label: 'Subjects', value: item.Subject },
-            { label: 'Collection', value: item.Collection },
-            { label: 'Institution', value: item.Institution },
-            { label: 'Date', value: item.Date }
-        ];
+  function openModal(enc) {
+    const item = JSON.parse(decodeURIComponent(enc));
+    document.getElementById('modalTitle').textContent = item.Title || "(untitled)";
+    document.getElementById('modalImg').src = item.Thumbnail;
+    document.getElementById('modalLink').href = item.Link || "#";
 
-        document.getElementById('modalMeta').innerHTML = fields
-            .filter(f => f.value && f.value !== "None" && f.value.trim() !== "")
-            .map(f => `
-                <div class="meta-label">${f.label}</div>
-                <div>${f.value}</div>
-            `)
-            .join('');
+    const fields = [
+      { label: 'Description', value: item.Description },
+      { label: 'Subjects', value: item.Subject },
+      { label: 'Collection', value: item.Collection },
+      { label: 'Institution', value: item.Institution },
+      { label: 'Date', value: item.Date }
+    ];
+    document.getElementById('modalMeta').innerHTML = fields
+      .filter(f => f.value && f.value.trim() !== "")
+      .map(f => `<div class="meta-label">${f.label}</div><div>${f.value}</div>`).join('');
+    modal.style.display = "block";
+    modal.setAttribute('aria-hidden', 'false');
+  }
+  function closeModal() { modal.style.display = "none"; modal.setAttribute('aria-hidden', 'true'); }
+  window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-        modal.style.display = "block";
-    }
-
-    function closeModal() { modal.style.display = "none"; }
-    window.onclick = e => { if (e.target == modal) closeModal(); }
-
-    // Search
-    searchInput.addEventListener('input', e => {
-        const searchTerms = e.target.value.toLowerCase().trim().split(/\s+/);
-        if (searchTerms[0] === "") {
-            display(data);
-            return;
-        }
-
-        const filtered = data.filter(item => {
-            const searchable = Object.values(item).join(" ").toLowerCase();
-            return searchTerms.every(term => searchable.includes(term));
-        });
-
-        display(filtered);
+  // Search (AND logic across tokens)
+  elSearch.addEventListener('input', (e) => {
+    const terms = e.target.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) { render(data); return; }
+    const filtered = data.filter(item => {
+      const text = `${item.Title} ${item.Description} ${item.Subject} ${item.Collection} ${item.Institution} ${item.Date}`.toLowerCase();
+      return terms.every(t => text.includes(t));
     });
+    render(filtered);
+  });
 </script>
 
 </body>

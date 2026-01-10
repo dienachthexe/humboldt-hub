@@ -7,9 +7,12 @@ on:
 jobs:
   harvest:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Hub
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -37,33 +40,33 @@ jobs:
 
           # Exact blacklist for DigitalCommons discovery
           exact_blacklist = [
-              'alra', 'apportionment', 'authorresources', 'booger', 'botany_jps',
-              'cahssnews', 'capstone', 'careercurriculumconnections', 'ccv',
-              'chanterelle', 'clubnews', 'comm300', 'conferences', 'contaminated_sites',
-              'courageouscuentos', 'creative_pub', 'crp', 'csucompetitionvideos',
-              'csuglobalaction', 'csuglobaljournal', 'culturaltimes', 'data', 'digitallab',
-              'esmproject', 'etd', 'etd_slideshow', 'faculty', 'facultypub', 'fiction',
-              'foodfutures', 'gradnews', 'gradslam', 'gspproject', 'h5ii', 'hb_infrastructure',
-              'hb_sustainability', 'hcapc', 'hcapc_aerial', 'hcapc_index', 'herbarium_photos',
-              'histpaper', 'hjm', 'hjsr', 'hjsrvideo', 'homepage_gallery', 'hsuslri',
-              'hsuslri_geospatial', 'hsuslri_local', 'hsuslri_presentations', 'hsuslri_state',
-              'hsuslri_student', 'humboldtgeographic', 'humnews', 'ideafest-events', 'ije',
-              'inrsep_posters', 'internationalnews', 'interviews', 'isfsi', 'isfsi_geospatial',
-              'isfsi_local', 'isfsi_presentations', 'isfsi_state', 'isfsi_student', 'journals',
-              'jscc_conference', 'jscc_student', 'librarian', 'library_pub', 'librarypub',
-              'math', 'monographs', 'msw', 'oceanogrpahypub', 'odeinews', 'oer',
-              'oer_sustainability', 'open_ed', 'pelicanbayresearchjournal', 'personas',
-              'physicssims', 'politics', 'polyarc', 'posters', 'pracademics', 'press',
-              'projectrebound', 'projects', 'proposals', 'rectourism', 'reprint', 'rr', 'rrv',
-              'rspnews', 'rwc', 'senior_cd', 'senior_comm', 'senior_crgs', 'senior_esm',
-              'senior_ffrm', 'senior_hist', 'senior_math', 'senior_soc', 'sotl_ip', 'student',
-              'studentcomm', 'studenthist', 'studentresearchbio', 'studentscholar',
-              'sustainability', 'telonichernews', 'textbooks', 'theosprey', 'theosprey1970s',
-              'theosprey1980s', 'theosprey1990s', 'theosprey2000s', 'theosprey2010s',
-              'theosprey2020s', 'toyon', 'toyonv', 'unconference', 'wildlife_posters',
-              'world', 'worlddahs', 'worlddahsimages', 'worlddahsimages-2019-2020',
-              'worldwlc', 'worldwlcimages', 'worldwlcimages-2019-2020', 'worldwlcimages-sp19',
-              'wrrap', 'xavhumboldt', 'yesv', 'zerowaste'
+              'alra','apportionment','authorresources','booger','botany_jps',
+              'cahssnews','capstone','careercurriculumconnections','ccv',
+              'chanterelle','clubnews','comm300','conferences','contaminated_sites',
+              'courageouscuentos','creative_pub','crp','csucompetitionvideos',
+              'csuglobalaction','csuglobaljournal','culturaltimes','data','digitallab',
+              'esmproject','etd','etd_slideshow','faculty','facultypub','fiction',
+              'foodfutures','gradnews','gradslam','gspproject','h5ii','hb_infrastructure',
+              'hb_sustainability','hcapc','hcapc_aerial','hcapc_index','herbarium_photos',
+              'histpaper','hjm','hjsr','hjsrvideo','homepage_gallery','hsuslri',
+              'hsuslri_geospatial','hsuslri_local','hsuslri_presentations','hsuslri_state',
+              'hsuslri_student','humboldtgeographic','humnews','ideafest-events','ije',
+              'inrsep_posters','internationalnews','interviews','isfsi','isfsi_geospatial',
+              'isfsi_local','isfsi_presentations','isfsi_state','isfsi_student','journals',
+              'jscc_conference','jscc_student','librarian','library_pub','librarypub',
+              'math','monographs','msw','oceanogrpahypub','odeinews','oer',
+              'oer_sustainability','open_ed','pelicanbayresearchjournal','personas',
+              'physicssims','politics','polyarc','posters','pracademics','press',
+              'projectrebound','projects','proposals','rectourism','reprint','rr','rrv',
+              'rspnews','rwc','senior_cd','senior_comm','senior_crgs','senior_esm',
+              'senior_ffrm','senior_hist','senior_math','senior_soc','sotl_ip','student',
+              'studentcomm','studenthist','studentresearchbio','studentscholar',
+              'sustainability','telonichernews','textbooks','theosprey','theosprey1970s',
+              'theosprey1980s','theosprey1990s','theosprey2000s','theosprey2010s',
+              'theosprey2020s','toyon','toyonv','unconference','wildlife_posters',
+              'world','worlddahs','worlddahsimages','worlddahsimages-2019-2020',
+              'worldwlc','worldwlcimages','worldwlcimages-2019-2020','worldwlcimages-sp19',
+              'wrrap','xavhumboldt','yesv','zerowaste'
           ]
 
           def safe_join(values):
@@ -85,7 +88,7 @@ jobs:
               sys.exit(1)
 
           all_rows = []
-          header = ['Title', 'Description', 'Subject', 'Date', 'Collection', 'Institution', 'Thumbnail', 'Link']
+          header = ['Title','Description','Subject','Date','Collection','Institution','Thumbnail','Link']
 
           for repo in config_list:
               ptype = (repo.get('Platform_Type') or '').strip()
@@ -96,11 +99,15 @@ jobs:
               if ptype == 'DigitalCommons':
                   try:
                       sickle = Sickle(base)
+                      # Build allowed_sets from ListSets, comparing both raw and tail values
                       allowed_sets = []
                       for s in sickle.ListSets():
-                          set_spec_clean = s.setSpec.replace('publication:', '')
-                          if set_spec_clean not in exact_blacklist:
-                              allowed_sets.append(s.setSpec)
+                          raw  = s.setSpec.strip()           # e.g., "publication:capstone"
+                          tail = raw.split(':')[-1]          # e.g., "capstone"
+                          if (raw not in exact_blacklist) and (tail not in exact_blacklist):
+                              allowed_sets.append(raw)
+                      print(f"DigitalCommons: harvesting {len(allowed_sets)} set(s)")
+
                       for set_spec in allowed_sets:
                           count = 0
                           records = sickle.ListRecords(metadataPrefix=prefix, set=set_spec, ignore_deleted=True)
@@ -166,7 +173,7 @@ jobs:
                   except Exception as e:
                       print(f"Archives (MARCXML) parse error: {e}", file=sys.stderr)
 
-          # Write master.csv
+          # Write master.csv (LF line endings for Linux runner)
           try:
               with open(OUTPUT_CSV, 'w', newline='\n', encoding='utf-8') as f:
                   writer = csv.writer(f)
@@ -182,12 +189,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config core.autocrlf false
-          git config core.eol lf
-
-          # Show status (debug)
-          git status
-          git diff -- master.csv || true
 
           # Commit/push only if changed
           if ! git diff --quiet -- master.csv; then
@@ -198,4 +199,4 @@ jobs:
             echo "Committed and pushed updated master.csv"
           else
             echo "No changes in master.csv; skipping commit/push."
-          fi
+          fi fi
