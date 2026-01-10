@@ -27,8 +27,7 @@ jobs:
           
           all_data = []
           
-          # We keep your exact blacklist for the DigitalCommons discovery phase
-          pattern_list = ['studentnewspaper', 'ellenadornews', 'ideafest']
+          # Exact blacklist for DigitalCommons discovery
           exact_blacklist = [
               'alra', 'apportionment', 'authorresources', 'booger', 'botany_jps', 
               'cahssnews', 'capstone', 'careercurriculumconnections', 'ccv', 
@@ -57,101 +56,85 @@ jobs:
               'world', 'worlddahs', 'worlddahsimages', 'worlddahsimages-2019-2020', 
               'worldwlc', 'worldwlcimages', 'worldwlcimages-2019-2020', 'worldwlcimages-sp19', 
               'wrrap', 'xavhumboldt', 'yesv', 'zerowaste'
-          ] 
+          ]
 
-          # Helper to extract MARC data based on tag/subfield
           def get_marc(rec, tag, code):
               ns = {'m': 'http://www.loc.gov/MARC21/slim'}
               f = rec.find(f\".//*[@tag='{tag}']\")
               if f is None: return ''
               return ' '.join([sf.text for sf in f.findall(f\".//*[@code='{code}']\") if sf.text])
 
-          # --- READ THE CROSSWALK CONFIG ---
-          with open('repository_config.csv', mode='r', encoding='utf-8') as f:
+          with open('repository_config.csv', mode='r', encoding='utf-8-sig') as f:
               reader = csv.DictReader(f)
-              config = {row['Platform_Type']: row for row in reader}
+              config_list = list(reader)
 
-          # --- PART 1: DigitalCommons ---
-          if 'DigitalCommons' in config:
-              repo = config['DigitalCommons']
-              try:
-                  sickle_dc = Sickle(repo['Base_URL'])
-                  all_sets = sickle_dc.ListSets()
-                  for s in all_sets:
-                      full_sid = s.setSpec.lower()
-                      short_sid = full_sid.replace('publication:', '')
-                      if any(p in short_sid for p in pattern_list) and short_sid not in ['studentnewspaper', 'ellenador', 'ideafest']:
-                          continue
-                      if short_sid in exact_blacklist:
-                          continue
-                      if 'publication:' in full_sid:
-                          try:
-                              records = sickle_dc.ListRecords(metadataPrefix=repo['Prefix'], set=full_sid, ignore_deleted=True)
-                              for i, record in enumerate(records):
-                                  if i >= 50: break 
-                                  m = record.metadata
-                                  all_ids = m.get('identifier', []) + m.get('description', [])
-                                  thumb = next((url for url in all_ids if 'thumbnail.jpg' in url), 'https://img.icons8.com/color/96/document.png')
-                                  clean_desc = [d for d in m.get('description', []) if 'thumbnail.jpg' not in d]
-                                  subjects = []
-                                  for sub in m.get(repo['Subject_Field'], []):
-                                      subjects.extend([item.strip() for item in sub.split(',')])
-                                  all_data.append([
-                                      ' ; '.join(m.get(repo['Title_Field'], [])).replace(':', '').strip(),
-                                      ' ; '.join(m.get('creator', []) + m.get('contributor', [])),
-                                      ' ; '.join(clean_desc), ' ; '.join(list(set(subjects))),
-                                      ' ; '.join(m.get(repo['Collection_Field'], [])), repo['Institution_Name'], thumb,
-                                      next((id for id in m.get('identifier', []) if 'digitalcommons.humboldt.edu' in id and 'thumbnail' not in id), '')
-                                  ])
-                          except: pass
-              except Exception as e: print(f'DC Error: {e}')
-
-          # --- PART 2: CONTENTdm (Qualified) ---
-          if 'CONTENTdm' in config:
-              repo = config['CONTENTdm']
-              try:
-                  sickle_cdm = Sickle(repo['Base_URL'])
-                  records = sickle_cdm.ListRecords(metadataPrefix=repo['Prefix'], set='palmquistyale', ignore_deleted=True)
-                  for i, record in enumerate(records):
-                      if i >= 100: break
-                      m = record.metadata
-                      sid = record.header.identifier.split('/')[-1]
-                      all_data.append([
-                          ' ; '.join(m.get(repo['Title_Field'], [])).replace(':', '').strip(),
-                          ' ; '.join(m.get('creator', [])), ' ; '.join(m.get(repo['Description_Field'], [])),
-                          ' ; '.join(m.get(repo['Subject_Field'], [])), ' ; '.join(m.get(repo['Collection_Field'], [])), 
-                          repo['Institution_Name'],
-                          repo['Thumbnail_Pattern'].format(setSpec='palmquistyale', id=sid),
-                          repo['Link_Pattern'].format(setSpec='palmquistyale', id=sid)
-                      ])
-              except Exception as e: print(f'CDM Error: {e}')
-
-          # --- PART 3: MARCXML (Finding Aids) ---
-          if 'Archives (Alma)' in config:
-              repo = config['Archives (Alma)']
-              for xml_file in glob.glob('finding*.xml'):
+          for repo in config_list:
+              ptype = repo['Platform_Type']
+              
+              if ptype == 'DigitalCommons':
                   try:
+                      sickle = Sickle(repo['Base_URL'])
+                      all_sets = [s.setSpec for s in sickle.ListSets() if s.setSpec.replace('publication:','') not in exact_blacklist]
+                      for set_spec in all_sets:
+                          records = sickle.ListRecords(metadataPrefix=repo['Prefix'], set=set_spec, ignore_deleted=True)
+                          for i, record in enumerate(records):
+                              if i >= 50: break
+                              m = record.metadata
+                              thumb = next((u for u in m.get('description', []) if '.jpg' in u), 'https://img.icons8.com/color/96/document.png')
+                              link = next((u for u in m.get('identifier', []) if 'humboldt.edu' in u and '.jpg' not in u), '')
+                              all_data.append([
+                                  ' ; '.join(m.get(repo['Title_Field'], [])).strip(),
+                                  ' ; '.join(m.get(repo['Description_Field'], [])),
+                                  ' ; '.join(m.get(repo['Subject_Field'], [])),
+                                  ' ; '.join(m.get(repo['Date_Field'], [])),
+                                  ' ; '.join(m.get(repo['Collection_Field'], [])),
+                                  repo['Institution_Name'], thumb, link
+                              ])
+                  except: pass
+
+              elif ptype == 'CONTENTdm':
+                  try:
+                      sickle = Sickle(repo['Base_URL'])
+                      records = sickle.ListRecords(metadataPrefix=repo['Prefix'], set='palmquistyale', ignore_deleted=True)
+                      for i, record in enumerate(records):
+                          if i >= 100: break
+                          m = record.metadata
+                          sid = record.header.identifier.split('/')[-1]
+                          all_data.append([
+                              ' ; '.join(m.get(repo['Title_Field'], [])).strip(),
+                              ' ; '.join(m.get(repo['Description_Field'], [])),
+                              ' ; '.join(m.get(repo['Subject_Field'], [])),
+                              ' ; '.join(m.get(repo['Date_Field'], [])),
+                              ' ; '.join(m.get(repo['Collection_Field'], [])),
+                              repo['Institution_Name'],
+                              repo['Thumbnail_Pattern'].format(setSpec='palmquistyale', id=sid),
+                              repo['Link_Pattern'].format(setSpec='palmquistyale', id=sid)
+                          ])
+                  except: pass
+
+              elif 'Archives' in ptype:
+                  for xml_file in glob.glob('finding*.xml'):
                       tree = ET.parse(xml_file)
                       root = tree.getroot()
                       marcs = root.findall('.//record') or root.findall('.//{http://www.loc.gov/MARC21/slim}record')
                       for record in marcs:
-                          # Using the 008 date slice [07-10]
                           f008 = record.find(\".//*[@tag='008']\")
                           date = f008.text[7:11] if f008 is not None else ''
                           mms_id = record.find(\".//*[@tag='001']\").text
                           all_data.append([
-                              get_marc(record, '245', 'a').replace(':', '').strip(),
-                              'Archives', get_marc(record, '520', 'a'), get_marc(record, '650', 'a'),
-                              get_marc(record, '710', 'a'), repo['Institution_Name'], 
-                              'https://img.icons8.com/color/96/folder-invoices--v1.png', 
+                              get_marc(record, '245', 'a'),
+                              get_marc(record, '520', 'a'),
+                              get_marc(record, '650', 'a'),
+                              date,
+                              get_marc(record, '710', 'a'),
+                              repo['Institution_Name'],
+                              'https://img.icons8.com/color/96/folder-invoices--v1.png',
                               repo['Link_Pattern'].format(mms_id=mms_id)
                           ])
-                  except Exception as e: print(f'XML Error: {e}')
 
-          # --- PART 4: SAVE ---
           with open('master.csv', 'w', newline='', encoding='utf-8') as f:
               writer = csv.writer(f)
-              writer.writerow(['Title', 'Creator', 'Description', 'Subject', 'Collection', 'Source', 'Thumbnail', 'Link'])
+              writer.writerow(['Title', 'Description', 'Subject', 'Date', 'Collection', 'Institution', 'Thumbnail', 'Link'])
               writer.writerows(all_data)
           "
       - name: Save to GitHub
@@ -159,5 +142,5 @@ jobs:
           git config --global user.name 'humboldt-hub-robot'
           git config --global user.email 'robot@humboldt-hub.local'
           git add master.csv
-          git commit -m "Universal Crosswalk Harvest with QDC and MARC" || exit 0
+          git commit -m "Sync master.csv with repository_config crosswalk" || exit 0
           git push
