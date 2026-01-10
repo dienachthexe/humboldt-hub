@@ -99,7 +99,7 @@ jobs:
               if ptype == 'DigitalCommons':
                   try:
                       sickle = Sickle(base)
-                      # Build allowed_sets from ListSets, comparing both raw and tail values
+                      # Compare both raw and tail values to avoid over-filtering
                       allowed_sets = []
                       for s in sickle.ListSets():
                           raw  = s.setSpec.strip()           # e.g., "publication:capstone"
@@ -114,7 +114,7 @@ jobs:
                           for record in records:
                               m = record.metadata
                               title = safe_join(m.get(repo['Title_Field'], []))
-                              desc  = safe_join(m.get(repo['Description_Field'], []))
+                              desc  = safe_join([u for u in m.get(repo['Description_Field'], []) if not (isinstance(u, str) and u.lower().endswith('.jpg'))])  # strip image URLs
                               subj  = safe_join(m.get(repo['Subject_Field'], []))
                               date  = safe_join(m.get(repo['Date_Field'], []))
                               coll  = safe_join(m.get(repo['Collection_Field'], []))
@@ -138,7 +138,7 @@ jobs:
                           m = record.metadata
                           sid = record.header.identifier.split('/')[-1]
                           title = safe_join(m.get(repo['Title_Field'], []))
-                          desc  = safe_join(m.get(repo['Description_Field'], []))
+                          desc  = safe_join([u for u in m.get(repo['Description_Field'], []) if not (isinstance(u, str) and u.lower().endswith('.jpg'))])  # strip image URLs
                           subj  = safe_join(m.get(repo['Subject_Field'], []))
                           date  = safe_join(m.get(repo['Date_Field'], []))
                           coll  = safe_join(m.get(repo['Collection_Field'], []))
@@ -186,17 +186,18 @@ jobs:
           PYCODE
 
       - name: Commit master.csv if changed
+        shell: bash
         run: |
+          set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Commit/push only if changed
-          if ! git diff --quiet -- master.csv; then
+          if git diff --quiet -- master.csv; then
+            echo "No changes in master.csv; skipping commit/push."
+          else
             git add master.csv
             git commit -m "Harvest: update master.csv (manual run)"
             git pull --rebase
             git push
             echo "Committed and pushed updated master.csv"
-          else
-            echo "No changes in master.csv; skipping commit/push."
-          fi fi
+          fi
