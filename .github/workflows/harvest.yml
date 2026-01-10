@@ -1,6 +1,8 @@
+
 name: Automagical Multi-Collection Harvest
+
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   harvest:
@@ -14,133 +16,215 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install Sickle
-        run: pip install sickle
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install sickle lxml
 
       - name: Run Precision Harvest
+        shell: bash
         run: |
-          python -c "
+          python <<'PYCODE'
           from sickle import Sickle
           import csv
           import xml.etree.ElementTree as ET
           import glob
-          
-          all_data = []
-          
+          import sys
+
+          # --------------------------------------------------------------------
+          # Config: repository_config.csv drives platform settings
+          # --------------------------------------------------------------------
+          CONFIG_PATH = 'repository_config.csv'
+          OUTPUT_CSV  = 'master.csv'
+
           # Exact blacklist for DigitalCommons discovery
           exact_blacklist = [
-              'alra', 'apportionment', 'authorresources', 'booger', 'botany_jps', 
-              'cahssnews', 'capstone', 'careercurriculumconnections', 'ccv', 
+              'alra', 'apportionment', 'authorresources', 'booger', 'botany_jps',
+              'cahssnews', 'capstone', 'careercurriculumconnections', 'ccv',
               'chanterelle', 'clubnews', 'comm300', 'conferences', 'contaminated_sites',
-              'courageouscuentos', 'creative_pub', 'crp', 'csucompetitionvideos', 
+              'courageouscuentos', 'creative_pub', 'crp', 'csucompetitionvideos',
               'csuglobalaction', 'csuglobaljournal', 'culturaltimes', 'data', 'digitallab',
               'esmproject', 'etd', 'etd_slideshow', 'faculty', 'facultypub', 'fiction',
               'foodfutures', 'gradnews', 'gradslam', 'gspproject', 'h5ii', 'hb_infrastructure',
               'hb_sustainability', 'hcapc', 'hcapc_aerial', 'hcapc_index', 'herbarium_photos',
-              'histpaper', 'hjm', 'hjsr', 'hjsrvideo', 'homepage_gallery', 'hsuslri', 
+              'histpaper', 'hjm', 'hjsr', 'hjsrvideo', 'homepage_gallery', 'hsuslri',
               'hsuslri_geospatial', 'hsuslri_local', 'hsuslri_presentations', 'hsuslri_state',
               'hsuslri_student', 'humboldtgeographic', 'humnews', 'ideafest-events', 'ije',
               'inrsep_posters', 'internationalnews', 'interviews', 'isfsi', 'isfsi_geospatial',
               'isfsi_local', 'isfsi_presentations', 'isfsi_state', 'isfsi_student', 'journals',
               'jscc_conference', 'jscc_student', 'librarian', 'library_pub', 'librarypub',
-              'math', 'monographs', 'msw', 'oceanogrpahypub', 'odeinews', 'oer', 
+              'math', 'monographs', 'msw', 'oceanogrpahypub', 'odeinews', 'oer',
               'oer_sustainability', 'open_ed', 'pelicanbayresearchjournal', 'personas',
               'physicssims', 'politics', 'polyarc', 'posters', 'pracademics', 'press',
               'projectrebound', 'projects', 'proposals', 'rectourism', 'reprint', 'rr', 'rrv',
               'rspnews', 'rwc', 'senior_cd', 'senior_comm', 'senior_crgs', 'senior_esm',
               'senior_ffrm', 'senior_hist', 'senior_math', 'senior_soc', 'sotl_ip', 'student',
-              'studentcomm', 'studenthist', 'studentresearchbio', 'studentscholar', 
+              'studentcomm', 'studenthist', 'studentresearchbio', 'studentscholar',
               'sustainability', 'telonichernews', 'textbooks', 'theosprey', 'theosprey1970s',
-              'theosprey1980s', 'theosprey1990s', 'theosprey2000s', 'theosprey2010s', 
-              'theosprey2020s', 'toyon', 'toyonv', 'unconference', 'wildlife_posters', 
-              'world', 'worlddahs', 'worlddahsimages', 'worlddahsimages-2019-2020', 
-              'worldwlc', 'worldwlcimages', 'worldwlcimages-2019-2020', 'worldwlcimages-sp19', 
+              'theosprey1980s', 'theosprey1990s', 'theosprey2000s', 'theosprey2010s',
+              'theosprey2020s', 'toyon', 'toyonv', 'unconference', 'wildlife_posters',
+              'world', 'worlddahs', 'worlddahsimages', 'worlddahsimages-2019-2020',
+              'worldwlc', 'worldwlcimages', 'worldwlcimages-2019-2020', 'worldwlcimages-sp19',
               'wrrap', 'xavhumboldt', 'yesv', 'zerowaste'
           ]
 
-          def get_marc(rec, tag, code):
-              ns = {'m': 'http://www.loc.gov/MARC21/slim'}
-              f = rec.find(f\".//*[@tag='{tag}']\")
-              if f is None: return ''
-              return ' '.join([sf.text for sf in f.findall(f\".//*[@code='{code}']\") if sf.text])
+          def safe_join(values):
+              return ' ; '.join(v for v in values if v).strip()
 
-          with open('repository_config.csv', mode='r', encoding='utf-8-sig') as f:
-              reader = csv.DictReader(f)
-              config_list = list(reader)
+          def get_marc(rec, tag, code):
+              # Works for element-tree view of MARCXML
+              f = rec.find(f".//*[@tag='{tag}']")
+              if f is None:
+                  return ''
+              subs = [sf.text for sf in f.findall(f".//*[@code='{code}']") if sf.text]
+              return ' '.join(subs).strip()
+
+          # Read repository_config.csv
+          try:
+              with open(CONFIG_PATH, mode='r', encoding='utf-8-sig') as f:
+                  config_list = list(csv.DictReader(f))
+          except Exception as e:
+              print(f"ERROR: Cannot read {CONFIG_PATH} — {e}", file=sys.stderr)
+              sys.exit(1)
+
+          all_rows = []
+          # Header matches your site expectations
+          header = ['Title', 'Description', 'Subject', 'Date', 'Collection', 'Institution', 'Thumbnail', 'Link']
 
           for repo in config_list:
-              ptype = repo['Platform_Type']
-              
+              ptype = (repo.get('Platform_Type') or '').strip()
+              base  = repo.get('Base_URL')
+              prefix= repo.get('Prefix')
+
+              # ------------------------------
+              # DigitalCommons (OAI-PMH, oai_dc)
+              # ------------------------------
               if ptype == 'DigitalCommons':
                   try:
-                      sickle = Sickle(repo['Base_URL'])
-                      all_sets = [s.setSpec for s in sickle.ListSets() if s.setSpec.replace('publication:','') not in exact_blacklist]
-                      for set_spec in all_sets:
-                          records = sickle.ListRecords(metadataPrefix=repo['Prefix'], set=set_spec, ignore_deleted=True)
-                          for i, record in enumerate(records):
-                              if i >= 50: break
-                              m = record.metadata
-                              thumb = next((u for u in m.get('description', []) if '.jpg' in u), 'https://img.icons8.com/color/96/document.png')
-                              link = next((u for u in m.get('identifier', []) if 'humboldt.edu' in u and '.jpg' not in u), '')
-                              all_data.append([
-                                  ' ; '.join(m.get(repo['Title_Field'], [])).strip(),
-                                  ' ; '.join(m.get(repo['Description_Field'], [])),
-                                  ' ; '.join(m.get(repo['Subject_Field'], [])),
-                                  ' ; '.join(m.get(repo['Date_Field'], [])),
-                                  ' ; '.join(m.get(repo['Collection_Field'], [])),
-                                  repo['Institution_Name'], thumb, link
-                              ])
-                  except: pass
+                      sickle = Sickle(base)
+                      # filter out blacklisted sets
+                      allowed_sets = []
+                      for s in sickle.ListSets():
+                          set_spec = s.setSpec.replace('publication:', '')
+                          if set_spec not in exact_blacklist:
+                              allowed_sets.append(s.setSpec)
 
+                      for set_spec in allowed_sets:
+                          # Cap at 50 per set (your test limit)
+                          count = 0
+                          records = sickle.ListRecords(metadataPrefix=prefix, set=set_spec, ignore_deleted=True)
+                          for record in records:
+                              m = record.metadata
+                              title = safe_join(m.get(repo['Title_Field'], []))
+                              desc  = safe_join(m.get(repo['Description_Field'], []))
+                              subj  = safe_join(m.get(repo['Subject_Field'], []))
+                              date  = safe_join(m.get(repo['Date_Field'], []))
+                              coll  = safe_join(m.get(repo['Collection_Field'], []))
+
+                              # Thumbnail: first description ending in .jpg else default icon
+                              thumb = next((u for u in m.get('description', []) if isinstance(u, str) and '.jpg' in u), 'https://img.icons8.com/color/96/document.png')
+                              # Link: first identifier that contains humboldt.edu and isn’t a .jpg
+                              link_candidates = [u for u in m.get('identifier', []) if isinstance(u, str)]
+                              link = next((u for u in link_candidates if 'humboldt.edu' in u and '.jpg' not in u), '')
+
+                              all_rows.append([title, desc, subj, date, coll, repo['Institution_Name'], thumb, link])
+
+                              count += 1
+                              if count >= 50:
+                                  break
+                  except Exception as e:
+                      print(f"DigitalCommons harvest error: {e}", file=sys.stderr)
+
+              # ------------------------------
+              # CONTENTdm (OAI-PMH, oai_qdc) — only 'palmquistyale'
+              # ------------------------------
               elif ptype == 'CONTENTdm':
                   try:
-                      sickle = Sickle(repo['Base_URL'])
-                      records = sickle.ListRecords(metadataPrefix=repo['Prefix'], set='palmquistyale', ignore_deleted=True)
-                      for i, record in enumerate(records):
-                          if i >= 100: break
+                      sickle = Sickle(base)
+                      records = sickle.ListRecords(metadataPrefix=prefix, set='palmquistyale', ignore_deleted=True)
+                      count = 0
+                      for record in records:
                           m = record.metadata
+                          # CONTENTdm id: use OAI header identifier last segment
                           sid = record.header.identifier.split('/')[-1]
-                          all_data.append([
-                              ' ; '.join(m.get(repo['Title_Field'], [])).strip(),
-                              ' ; '.join(m.get(repo['Description_Field'], [])),
-                              ' ; '.join(m.get(repo['Subject_Field'], [])),
-                              ' ; '.join(m.get(repo['Date_Field'], [])),
-                              ' ; '.join(m.get(repo['Collection_Field'], [])),
-                              repo['Institution_Name'],
-                              repo['Thumbnail_Pattern'].format(setSpec='palmquistyale', id=sid),
-                              repo['Link_Pattern'].format(setSpec='palmquistyale', id=sid)
-                          ])
-                  except: pass
 
+                          title = safe_join(m.get(repo['Title_Field'], []))
+                          desc  = safe_join(m.get(repo['Description_Field'], []))
+                          subj  = safe_join(m.get(repo['Subject_Field'], []))
+                          date  = safe_join(m.get(repo['Date_Field'], []))
+                          coll  = safe_join(m.get(repo['Collection_Field'], []))
+
+                          thumb = repo['Thumbnail_Pattern'].format(setSpec='palmquistyale', id=sid)
+                          link  = repo['Link_Pattern'].format(setSpec='palmquistyale', id=sid)
+
+                          all_rows.append([title, desc, subj, date, coll, repo['Institution_Name'], thumb, link])
+
+                          count += 1
+                          if count >= 100:
+                              break
+                  except Exception as e:
+                      print(f"CONTENTdm harvest error: {e}", file=sys.stderr)
+
+              # ------------------------------
+              # Archives (Alma) — local finding aids (MARCXML)
+              # ------------------------------
               elif 'Archives' in ptype:
-                  for xml_file in glob.glob('finding*.xml'):
-                      tree = ET.parse(xml_file)
-                      root = tree.getroot()
-                      marcs = root.findall('.//record') or root.findall('.//{http://www.loc.gov/MARC21/slim}record')
-                      for record in marcs:
-                          f008 = record.find(\".//*[@tag='008']\")
-                          date = f008.text[7:11] if f008 is not None else ''
-                          mms_id = record.find(\".//*[@tag='001']\").text
-                          all_data.append([
-                              get_marc(record, '245', 'a'),
-                              get_marc(record, '520', 'a'),
-                              get_marc(record, '650', 'a'),
-                              date,
-                              get_marc(record, '710', 'a'),
-                              repo['Institution_Name'],
-                              'https://img.icons8.com/color/96/folder-invoices--v1.png',
-                              repo['Link_Pattern'].format(mms_id=mms_id)
-                          ])
+                  try:
+                      for xml_file in glob.glob('finding*.xml'):
+                          tree = ET.parse(xml_file)
+                          root = tree.getroot()
+                          # MARC records can be bare <record> or namespaced
+                          marcs = root.findall('.//record') or root.findall('.//{http://www.loc.gov/MARC21/slim}record')
+                          for record in marcs:
+                              f008 = record.find(".//*[@tag='008']")
+                              date = f008.text[7:11] if (f008 is not None and f008.text and len(f008.text) >= 11) else ''
+                              f001 = record.find(".//*[@tag='001']")
+                              mms_id = f001.text if f001 is not None else ''
 
-          with open('master.csv', 'w', newline='', encoding='utf-8') as f:
+                              title = get_marc(record, '245', 'a')
+                              desc  = get_marc(record, '520', 'a')
+                              subj  = get_marc(record, '650', 'a')
+                              coll  = get_marc(record, '710', 'a')
+
+                              thumb = 'https://img.icons8.com/color/96/folder-invoices--v1.png'
+                              link  = (repo['Link_Pattern'].format(mms_id=mms_id) if mms_id else '')
+
+                              all_rows.append([title, desc, subj, date, coll, repo['Institution_Name'], thumb, link])
+                  except Exception as e:
+                      print(f"Archives (MARCXML) parse error: {e}", file=sys.stderr)
+
+          # Write master.csv
+          with open(OUTPUT_CSV, 'w', newline='', encoding='utf-8') as f:
               writer = csv.writer(f)
-              writer.writerow(['Title', 'Description', 'Subject', 'Date', 'Collection', 'Institution', 'Thumbnail', 'Link'])
-              writer.writerows(all_data)
-          "
-      - name: Save to GitHub
+              writer.writerow(header)
+              writer.writerows(all_rows)
+
+          print(f"Wrote {len(all_rows)} rows to {OUTPUT_CSV}")
+          PYCODE
+
+      - name: Commit master.csv
         run: |
-          git config --global user.name 'humboldt-hub-robot'
-          git config --global user.email 'robot@humboldt-hub.local'
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add master.csv
-          git commit -m "Sync master.csv with repository_config crosswalk" || exit 0
+          git commit -m "Harvest: update master.csv (manual run)"
           git push
+
+  # OPTIONAL: build & deploy a static site (GitHub Pages)
+  # Uncomment this job if you use Pages and want auto-deploy after harvest.
+  # build_deploy:
+  #   needs: harvest
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     pages: write
+  #     id-token: write
+  #     contents: read
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #     - name: Upload site
+  #       uses: actions/upload-pages-artifact@v3
+  #       with:
+  #         path: .
+  #     - name: Deploy to GitHub Pages
+  #       uses: actions/deploy-pages@v4

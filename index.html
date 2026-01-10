@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,17 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Humboldt History Hub</title>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+
     <style>
         :root { --primary: #2c3e50; --accent: #27ae60; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
         header { text-align: center; margin-bottom: 30px; }
         h1 { color: var(--primary); margin-bottom: 5px; }
-        
+
         .search-container { max-width: 600px; margin: 0 auto 10px auto; }
         #search { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 25px; font-size: 16px; outline: none; transition: border-color 0.3s; }
-        #search:focus { border-color: var(--accent); }
-        
-        #counter { text-align: center; color: #7f8c8d; font-size: 0.9rem; margin-bottom: 20px; min-height: 1.2em; }
+       -align: center; color: #7f8c8d; font-size: 0.9rem; margin-bottom: 20px; min-height: 1.2em; }
 
         .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s; }
@@ -24,7 +24,6 @@
         .card h3 { font-size: 1rem; margin: 0; color: var(--primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .card p { margin: 5px 0 0 0; color: #7f8c8d; }
 
-        /* Modal Styles */
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); overflow-y: auto; }
         .modal-content { background: white; margin: 5% auto; padding: 30px; width: 90%; max-width: 800px; border-radius: 15px; position: relative; display: flex; flex-direction: column; gap: 20px; }
         @media (min-width: 600px) { .modal-content { flex-direction: row; } }
@@ -36,14 +35,17 @@
         .btn { display: inline-block; background: var(--accent); color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; text-align: center; margin-top: 20px; }
     </style>
 </head>
+
 <body>
 
 <header>
     <h1>Humboldt History Hub</h1>
-    <p>Cal Poly Humboldt Special Collections & Archives</p>
+    <p>Cal Poly Humboldt Special Collections &amp; Archives</p>
+
     <div class="search-container">
         <input type="text" id="search" placeholder="Search by title, subject, or description...">
     </div>
+
     <div id="counter">Loading records...</div>
 </header>
 
@@ -53,6 +55,7 @@
     <div class="modal-content">
         <span class="close" onclick="closeModal()">&times;</span>
         <img id="modalImg" class="modal-img" src="" alt="Full view">
+
         <div class="modal-info">
             <h2 id="modalTitle"></h2>
             <div id="modalMeta"></div>
@@ -68,7 +71,7 @@
     const modal = document.getElementById('itemModal');
     const counter = document.getElementById('counter');
 
-    // Load the CSV
+    // Load master.csv (produced by your GitHub Action)
     Papa.parse('master.csv', {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
@@ -78,66 +81,65 @@
     });
 
     function display(items) {
-        // Update the counter text
         counter.innerText = `Showing ${items.length} of ${data.length} records`;
-        
-        gallery.innerHTML = items.map((item) => {
-            const itemData = JSON.stringify(item).replace(/'/g, "&apos;");
+
+        gallery.innerHTML = items.map(item => {
+            const itemData = encodeURIComponent(JSON.stringify(item));
             return `
-                <div class="card" onclick='openModal(${itemData})'>
+                <div class="card" onclick='openModal("${itemData}")'>
                     <img src="${item.Thumbnail}" alt="${item.Title}">
                     <h3>${item.Title}</h3>
-                    <p><small>${item.Source}</small></p>
+                    <p><small>${item.Institution}</small></p>
                 </div>
             `;
         }).join('');
     }
 
-    function openModal(item) {
+    function openModal(encoded) {
+        const item = JSON.parse(decodeURIComponent(encoded));
+
         document.getElementById('modalTitle').innerText = item.Title;
-        document.getElementById('modalImg').src = item.Thumbnail; 
+        document.getElementById('modalImg').src = item.Thumbnail;
         document.getElementById('modalLink').href = item.Link;
-        
+
         const fields = [
-            { label: 'Creator', value: item.Creator },
             { label: 'Description', value: item.Description },
             { label: 'Subjects', value: item.Subject },
-            { label: 'Collection Source', value: item.Source },
-            { label: 'Publisher', value: item.Publisher }
+            { label: 'Collection', value: item.Collection },
+            { label: 'Institution', value: item.Institution },
+            { label: 'Date', value: item.Date }
         ];
 
         document.getElementById('modalMeta').innerHTML = fields
-            .filter(f => f.value && f.value !== 'None' && f.value !== '')
-            .map(f => `<div class="meta-label">${f.label}</div><div>${f.value}</div>`)
+            .filter(f => f.value && f.value !== "None" && f.value.trim() !== "")
+            .map(f => `
+                <div class="meta-label">${f.label}</div>
+                <div>${f.value}</div>
+            `)
             .join('');
 
         modal.style.display = "block";
     }
 
     function closeModal() { modal.style.display = "none"; }
-    window.onclick = (event) => { if (event.target == modal) closeModal(); }
+    window.onclick = e => { if (e.target == modal) closeModal(); }
 
-    // UPGARDED SMART SEARCH
+    // Search
     searchInput.addEventListener('input', e => {
-        // Split search into individual words (tokens)
         const searchTerms = e.target.value.toLowerCase().trim().split(/\s+/);
-        
-        // If search is empty, show everything
         if (searchTerms[0] === "") {
             display(data);
             return;
         }
 
         const filtered = data.filter(item => {
-            // Combine all field values into one string to search against
-            const searchableText = Object.values(item).join(" ").toLowerCase();
-            
-            // Logic: The item must contain EVERY word typed in the search box (AND logic)
-            return searchTerms.every(term => searchableText.includes(term));
+            const searchable = Object.values(item).join(" ").toLowerCase();
+            return searchTerms.every(term => searchable.includes(term));
         });
-        
+
         display(filtered);
     });
 </script>
+
 </body>
 </html>
