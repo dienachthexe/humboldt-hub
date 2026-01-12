@@ -1,4 +1,3 @@
-
 name: Automagical Multi-Collection Harvest
 
 on:
@@ -34,11 +33,10 @@ jobs:
           import glob
           import sys
 
-          # Paths
           CONFIG_PATH = 'repository_config.csv'
           OUTPUT_CSV  = 'master.csv'
 
-          # Exact blacklist for DigitalCommons discovery
+          # Blacklist remains the same
           exact_blacklist = [
               'alra','apportionment','authorresources','booger','botany_jps',
               'cahssnews','capstone','careercurriculumconnections','ccv',
@@ -74,17 +72,15 @@ jobs:
 
           def get_marc(rec, tag, code):
               f = rec.find(f".//*[@tag='{tag}']")
-              if f is None:
-                  return ''
+              if f is None: return ''
               subs = [sf.text for sf in f.findall(f".//*[@code='{code}']") if sf.text]
               return ' '.join(subs).strip()
 
-          # Read repository_config.csv
           try:
               with open(CONFIG_PATH, mode='r', encoding='utf-8-sig') as f:
                   config_list = list(csv.DictReader(f))
           except Exception as e:
-              print(f"ERROR: Cannot read {CONFIG_PATH} — {e}", file=sys.stderr)
+              print(f"Error reading config: {e}")
               sys.exit(1)
 
           all_rows = []
@@ -93,68 +89,60 @@ jobs:
           for repo in config_list:
               ptype = (repo.get('Platform_Type') or '').strip()
               base  = repo.get('Base_URL')
-              prefix= repo.get('Prefix')
+              prefix = repo.get('Prefix')
 
-              # DigitalCommons
               if ptype == 'DigitalCommons':
+                  print(f"Starting DigitalCommons harvest from {base}...")
                   try:
                       sickle = Sickle(base)
-                      # Compare both raw and tail values to avoid over-filtering
-                      allowed_sets = []
-                      for s in sickle.ListSets():
-                          raw  = s.setSpec.strip()           # e.g., "publication:capstone"
-                          tail = raw.split(':')[-1]          # e.g., "capstone"
+                      sets = [s for s in sickle.ListSets()]
+                      for s in sets:
+                          raw = s.setSpec.strip()
+                          tail = raw.split(':')[-1]
                           if (raw not in exact_blacklist) and (tail not in exact_blacklist):
-                              allowed_sets.append(raw)
-                      print(f"DigitalCommons: harvesting {len(allowed_sets)} set(s)")
-
-                      for set_spec in allowed_sets:
-                          count = 0
-                          records = sickle.ListRecords(metadataPrefix=prefix, set=set_spec, ignore_deleted=True)
-                          for record in records:
-                              m = record.metadata
-                              title = safe_join(m.get(repo['Title_Field'], []))
-                              desc  = safe_join([u for u in m.get(repo['Description_Field'], []) if not (isinstance(u, str) and u.lower().endswith('.jpg'))])  # strip image URLs
-                              subj  = safe_join(m.get(repo['Subject_Field'], []))
-                              date  = safe_join(m.get(repo['Date_Field'], []))
-                              coll  = safe_join(m.get(repo['Collection_Field'], []))
-                              thumb = next((u for u in m.get('description', []) if isinstance(u, str) and '.jpg' in u), 'https://img.icons8.com/color/96/document.png')
-                              link_candidates = [u for u in m.get('identifier', []) if isinstance(u, str)]
-                              link = next((u for u in link_candidates if 'humboldt.edu' in u and '.jpg' not in u), '')
-                              all_rows.append([title, desc, subj, date, coll, repo['Institution_Name'], thumb, link])
-                              count += 1
-                              if count >= 50:
-                                  break
+                              try:
+                                  records = sickle.ListRecords(metadataPrefix=prefix, set=raw, ignore_deleted=True)
+                                  for record in records:
+                                      m = record.metadata
+                                      title = safe_join(m.get(repo['Title_Field'], []))
+                                      desc = safe_join([u for u in m.get(repo['Description_Field'], []) if not (isinstance(u, str) and u.lower().endswith('.jpg'))])
+                                      subj = safe_join(m.get(repo['Subject_Field'], []))
+                                      date = safe_join(m.get(repo['Date_Field'], []))
+                                      coll = safe_join(m.get(repo['Collection_Field'], []))
+                                      thumb = next((u for u in m.get('description', []) if isinstance(u, str) and '.jpg' in u), 'https://img.icons8.com/color/96/document.png')
+                                      link = next((u for u in m.get('identifier', []) if isinstance(u, str) and 'humboldt.edu' in u and '.jpg' not in u), '')
+                                      all_rows.append([title, desc, subj, date, coll, repo['Institution_Name'], thumb, link])
+                              except Exception as e:
+                                  print(f"Skipping set {raw}: {e}")
                   except Exception as e:
-                      print(f"DigitalCommons harvest error: {e}", file=sys.stderr)
+                      print(f"Critical DC Error: {e}")
 
-              # CONTENTdm (only palmquistyale)
               elif ptype == 'CONTENTdm':
+                  print("Starting CONTENTdm harvest...")
                   try:
                       sickle = Sickle(base)
+                      # No limit here
                       records = sickle.ListRecords(metadataPrefix=prefix, set='palmquistyale', ignore_deleted=True)
-                      count = 0
                       for record in records:
                           m = record.metadata
                           sid = record.header.identifier.split('/')[-1]
-                          title = safe_join(m.get(repo['Title_Field'], []))
-                          desc  = safe_join([u for u in m.get(repo['Description_Field'], []) if not (isinstance(u, str) and u.lower().endswith('.jpg'))])  # strip image URLs
-                          subj  = safe_join(m.get(repo['Subject_Field'], []))
-                          date  = safe_join(m.get(repo['Date_Field'], []))
-                          coll  = safe_join(m.get(repo['Collection_Field'], []))
-                          thumb = repo['Thumbnail_Pattern'].format(setSpec='palmquistyale', id=sid)
-                          link  = repo['Link_Pattern'].format(setSpec='palmquistyale', id=sid)
-                          all_rows.append([title, desc, subj, date, coll, repo['Institution_Name'], thumb, link])
-                          count += 1
-                          if count >= 100:
-                              break
+                          all_rows.append([
+                              safe_join(m.get(repo['Title_Field'], [])),
+                              safe_join([u for u in m.get(repo['Description_Field'], []) if not (isinstance(u, str) and u.lower().endswith('.jpg'))]),
+                              safe_join(m.get(repo['Subject_Field'], [])),
+                              safe_join(m.get(repo['Date_Field'], [])),
+                              safe_join(m.get(repo['Collection_Field'], [])),
+                              repo['Institution_Name'],
+                              repo['Thumbnail_Pattern'].format(setSpec='palmquistyale', id=sid),
+                              repo['Link_Pattern'].format(setSpec='palmquistyale', id=sid)
+                          ])
                   except Exception as e:
-                      print(f"CONTENTdm harvest error: {e}", file=sys.stderr)
+                      print(f"CONTENTdm Error: {e}")
 
-              # Archives (Alma) — local MARCXML
               elif 'Archives' in ptype:
-                  try:
-                      for xml_file in glob.glob('finding*.xml'):
+                  print("Processing local Archives XML files...")
+                  for xml_file in glob.glob('finding*.xml'):
+                      try:
                           tree = ET.parse(xml_file)
                           root = tree.getroot()
                           marcs = root.findall('.//record') or root.findall('.//{http://www.loc.gov/MARC21/slim}record')
@@ -163,26 +151,24 @@ jobs:
                               date = f008.text[7:11] if (f008 is not None and f008.text and len(f008.text) >= 11) else ''
                               f001 = record.find(".//*[@tag='001']")
                               mms_id = f001.text if f001 is not None else ''
-                              title = get_marc(record, '245', 'a')
-                              desc  = get_marc(record, '520', 'a')
-                              subj  = get_marc(record, '650', 'a')
-                              coll  = get_marc(record, '710', 'a')
-                              thumb = 'https://img.icons8.com/color/96/folder-invoices--v1.png'
-                              link  = (repo['Link_Pattern'].format(mms_id=mms_id) if mms_id else '')
-                              all_rows.append([title, desc, subj, date, coll, repo['Institution_Name'], thumb, link])
-                  except Exception as e:
-                      print(f"Archives (MARCXML) parse error: {e}", file=sys.stderr)
+                              all_rows.append([
+                                  get_marc(record, '245', 'a'),
+                                  get_marc(record, '520', 'a'),
+                                  get_marc(record, '650', 'a'),
+                                  date,
+                                  get_marc(record, '710', 'a'),
+                                  repo['Institution_Name'],
+                                  'https://img.icons8.com/color/96/folder-invoices--v1.png',
+                                  repo['Link_Pattern'].format(mms_id=mms_id) if mms_id else ''
+                              ])
+                      except Exception as e:
+                          print(f"XML Error in {xml_file}: {e}")
 
-          # Write master.csv (LF line endings for Linux runner)
-          try:
-              with open(OUTPUT_CSV, 'w', newline='\n', encoding='utf-8') as f:
-                  writer = csv.writer(f)
-                  writer.writerow(header)
-                  writer.writerows(all_rows)
-              print(f"Wrote {len(all_rows)} rows to {OUTPUT_CSV}")
-          except Exception as e:
-              print(f"ERROR: Cannot write {OUTPUT_CSV} — {e}", file=sys.stderr)
-              sys.exit(1)
+          with open(OUTPUT_CSV, 'w', newline='\n', encoding='utf-8') as f:
+              writer = csv.writer(f)
+              writer.writerow(header)
+              writer.writerows(all_rows)
+          print(f"Success! Harvested {len(all_rows)} total records.")
           PYCODE
 
       - name: Commit master.csv if changed
@@ -191,13 +177,11 @@ jobs:
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          if git diff --quiet -- master.csv; then
-            echo "No changes in master.csv; skipping commit/push."
+          git add master.csv
+          if git diff --staged --quiet; then
+            echo "No changes"
           else
-            git add master.csv
-            git commit -m "Harvest: update master.csv (manual run)"
+            git commit -m "Full harvest: $(date)"
             git pull --rebase
             git push
-            echo "Committed and pushed updated master.csv"
           fi
