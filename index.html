@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,6 +22,12 @@
       grid-template-columns: 100px 1fr;
       gap:12px; align-items:start;
       background:#fff; border:1px solid #e7eaef; border-radius:10px; padding:10px;
+      cursor: pointer; /* Makes cursor the 'hand' pointer */
+      transition: background 0.2s;
+    }
+    .result:hover {
+      background: #f0f4f8; /* Highlights the row on hover */
+      border-color: var(--accent);
     }
     .thumb { width:100px; height:80px; object-fit:cover; border-radius:6px; background:#eef1f5; }
     .title { margin:0; font-size:1rem; color:#1f2d3d; line-height:1.3; }
@@ -52,7 +57,6 @@
 
 <div id="results" class="results"></div>
 
-<!-- Modal -->
 <div id="itemModal" class="modal" aria-hidden="true">
   <div class="modal-content">
     <span class="close" onclick="closeModal()">&times;</span>
@@ -67,6 +71,7 @@
 
 <script>
   let data = [];
+  let currentFilteredItems = []; // To keep track of items for the click handler
   const elResults = document.getElementById('results');
   const elCounter = document.getElementById('counter');
   const elSearch = document.getElementById('search');
@@ -75,12 +80,11 @@
   // Helpers
   const normalizeYear = d => {
     if (!d) return "";
-    const m = String(d).match(/(19|20)\d{2}/);  // first 4-digit year
+    const m = String(d).match(/(19|20)\d{2}/); 
     return m ? m[0] : String(d);
   };
   const cleanDescription = desc => {
     if (!desc) return "";
-    // Split on " ; " and remove URL-like parts (including .jpg)
     const parts = String(desc).split(/\s*;\s*/).filter(p => !/^https?:\/\//i.test(p) && !/\.jpg$/i.test(p));
     return parts.join(' ; ');
   };
@@ -104,12 +108,12 @@
   });
 
   function render(items) {
+    currentFilteredItems = items; // Store globally so index-clicking works
     elCounter.textContent = `Showing ${items.length} of ${data.length} records`;
 
-    elResults.innerHTML = items.map(item => {
-      const payload = encodeURIComponent(JSON.stringify(item));
+    elResults.innerHTML = items.map((item, index) => {
       return `
-        <div class="result" onclick='openModal("${payload}")'>
+        <div class="result" onclick="openModalByIndex(${index})">
           <img class="thumb" src="${item.Thumbnail}" alt="thumbnail"/>
           <div>
             <h3 class="title">${item.Title || "(untitled)"}</h3>
@@ -124,8 +128,10 @@
     }).join('');
   }
 
-  function openModal(enc) {
-    const item = JSON.parse(decodeURIComponent(enc));
+  function openModalByIndex(index) {
+    const item = currentFilteredItems[index];
+    if (!item) return;
+
     document.getElementById('modalTitle').textContent = item.Title || "(untitled)";
     document.getElementById('modalImg').src = item.Thumbnail;
     document.getElementById('modalLink').href = item.Link || "#";
@@ -143,10 +149,11 @@
     modal.style.display = "block";
     modal.setAttribute('aria-hidden', 'false');
   }
+
   function closeModal() { modal.style.display = "none"; modal.setAttribute('aria-hidden', 'true'); }
   window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-  // Search (AND logic across tokens)
+  // Search
   elSearch.addEventListener('input', (e) => {
     const terms = e.target.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
     if (terms.length === 0) { render(data); return; }
