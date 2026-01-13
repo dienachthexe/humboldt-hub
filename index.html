@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Humboldt History Hub</title>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
   <style>
     :root { --primary:#2c3e50; --accent:#27ae60; }
     body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#f7f9fb; margin:0; padding:20px; }
@@ -22,11 +21,11 @@
       grid-template-columns: 100px 1fr;
       gap:12px; align-items:start;
       background:#fff; border:1px solid #e7eaef; border-radius:10px; padding:10px;
-      cursor: pointer; /* Makes cursor the 'hand' pointer */
+      cursor: pointer;
       transition: background 0.2s;
     }
     .result:hover {
-      background: #f0f4f8; /* Highlights the row on hover */
+      background: #f0f4f8;
       border-color: var(--accent);
     }
     .thumb { width:100px; height:80px; object-fit:cover; border-radius:6px; background:#eef1f5; }
@@ -37,6 +36,9 @@
     /* Modal */
     .modal { display:none; position:fixed; z-index:1000; inset:0; background:rgba(0,0,0,0.75); }
     .modal-content { background:#fff; margin:5% auto; padding:20px; width:90%; max-width:800px; border-radius:12px; position:relative; display:grid; grid-template-columns: 260px 1fr; gap:16px; }
+    @media (max-width: 600px) {
+      .modal-content { grid-template-columns: 1fr; margin:2% auto; height: 90vh; overflow-y: auto; }
+    }
     .close { position:absolute; right:16px; top:10px; font-size:28px; cursor:pointer; color:#999; }
     .modal-img { width:100%; height:200px; object-fit:contain; background:#f1f3f6; border-radius:8px; }
     .modal-info h2 { margin:0 0 6px 0; color:#1f2d3d; }
@@ -52,7 +54,7 @@
   <div class="search-container">
     <input id="search" type="text" placeholder="Search by title, subject, or description…"/>
   </div>
-  <div id="counter">Loading records…</div>
+  <div id="counter">Loading library records…</div>
 </header>
 
 <div id="results" class="results"></div>
@@ -64,14 +66,14 @@
     <div class="modal-info">
       <h2 id="modalTitle"></h2>
       <div id="modalMeta"></div>
-      <a id="modalLink" href="" target="_blank" rel="noopener" class="btn">View Original in Archive</a>
+      <a id="modalLink" href="" target="_blank" rel="noopener" class="btn">View Original Record</a>
     </div>
   </div>
 </div>
 
 <script>
   let data = [];
-  let currentFilteredItems = []; // To keep track of items for the click handler
+  let currentFilteredItems = []; 
   const elResults = document.getElementById('results');
   const elCounter = document.getElementById('counter');
   const elSearch = document.getElementById('search');
@@ -83,38 +85,38 @@
     const m = String(d).match(/(19|20)\d{2}/); 
     return m ? m[0] : String(d);
   };
-  const cleanDescription = desc => {
-    if (!desc) return "";
-    const parts = String(desc).split(/\s*;\s*/).filter(p => !/^https?:\/\//i.test(p) && !/\.jpg$/i.test(p));
-    return parts.join(' ; ');
-  };
 
-  // Load master.csv
-  Papa.parse('master.csv', {
-    download: true, header: true, skipEmptyLines: true,
-    complete: (results) => {
-      data = results.data.map(r => ({
-        Title: r.Title || "",
-        Description: cleanDescription(r.Description || ""),
-        Subject: r.Subject || "",
-        Date: normalizeYear(r.Date || ""),
-        Collection: r.Collection || "",
-        Institution: r.Institution || "",
-        Thumbnail: r.Thumbnail || "https://img.icons8.com/color/80/document.png",
-        Link: r.Link || ""
+  // 1. Load optimized JSON
+  fetch('master.json')
+    .then(response => {
+      if (!response.ok) throw new Error("Network response was not ok");
+      return response.json();
+    })
+    .then(jsonData => {
+      data = jsonData.map(item => ({
+        ...item,
+        Date: normalizeYear(item.Date)
       }));
       render(data);
-    }
-  });
+    })
+    .catch(err => {
+      console.error("Error loading JSON:", err);
+      elCounter.textContent = "Error loading database. Please check your connection.";
+    });
 
   function render(items) {
-    currentFilteredItems = items; // Store globally so index-clicking works
+    currentFilteredItems = items; 
     elCounter.textContent = `Showing ${items.length} of ${data.length} records`;
+
+    if (items.length === 0) {
+        elResults.innerHTML = '<p style="text-align:center; color:#7f8c8d;">No matching records found.</p>';
+        return;
+    }
 
     elResults.innerHTML = items.map((item, index) => {
       return `
         <div class="result" onclick="openModalByIndex(${index})">
-          <img class="thumb" src="${item.Thumbnail}" alt="thumbnail"/>
+          <img class="thumb" src="${item.Thumbnail}" alt="thumbnail" onerror="this.src='https://img.icons8.com/color/80/document.png'">
           <div>
             <h3 class="title">${item.Title || "(untitled)"}</h3>
             <div class="meta">
@@ -143,23 +145,31 @@
       { label: 'Institution', value: item.Institution },
       { label: 'Date', value: item.Date }
     ];
+
     document.getElementById('modalMeta').innerHTML = fields
-      .filter(f => f.value && f.value.trim() !== "")
+      .filter(f => f.value && String(f.value).trim() !== "")
       .map(f => `<div class="meta-label">${f.label}</div><div>${f.value}</div>`).join('');
+    
     modal.style.display = "block";
     modal.setAttribute('aria-hidden', 'false');
   }
 
-  function closeModal() { modal.style.display = "none"; modal.setAttribute('aria-hidden', 'true'); }
+  function closeModal() { 
+    modal.style.display = "none"; 
+    modal.setAttribute('aria-hidden', 'true'); 
+  }
+
   window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-  // Search
+  // 2. Search logic (Instant filtering)
   elSearch.addEventListener('input', (e) => {
-    const terms = e.target.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    if (terms.length === 0) { render(data); return; }
+    const query = e.target.value.toLowerCase().trim();
+    if (!query) { render(data); return; }
+    
+    const terms = query.split(/\s+/);
     const filtered = data.filter(item => {
-      const text = `${item.Title} ${item.Description} ${item.Subject} ${item.Collection} ${item.Institution} ${item.Date}`.toLowerCase();
-      return terms.every(t => text.includes(t));
+      const searchBlob = `${item.Title} ${item.Description} ${item.Subject} ${item.Collection} ${item.Date}`.toLowerCase();
+      return terms.every(t => searchBlob.includes(t));
     });
     render(filtered);
   });
