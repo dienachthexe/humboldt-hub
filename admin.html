@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History Hub | Admin Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans">
+
+    <header class="bg-slate-800 text-white p-6 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold tracking-tight">History Hub Admin</h1>
+            <div id="last-update" class="text-sm bg-slate-700 px-3 py-1 rounded">Loading status...</div>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-6 space-y-8">
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <p class="text-gray-500 text-sm font-medium uppercase">Total Records</p>
+                <h2 id="total-count" class="text-4xl font-bold text-blue-600">--</h2>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <p class="text-gray-500 text-sm font-medium uppercase">Active Platforms</p>
+                <h2 id="platform-count" class="text-4xl font-bold text-emerald-600">--</h2>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <p class="text-gray-500 text-sm font-medium uppercase">Unique Collections</p>
+                <h2 id="collection-count" class="text-4xl font-bold text-purple-600">--</h2>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Records by Institution</h3>
+                <canvas id="instChart" height="200"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Content Quality Audit</h3>
+                <div id="audit-list" class="space-y-3">
+                    </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-semibold">Latest Harvested Records</h3>
+                <input type="text" id="search" placeholder="Search title or subject..." class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-600 text-sm uppercase">
+                            <th class="p-4 font-semibold">Title</th>
+                            <th class="p-4 font-semibold">Collection</th>
+                            <th class="p-4 font-semibold">Institution</th>
+                            <th class="p-4 font-semibold">Link</th>
+                        </tr>
+                    </thead>
+                    <tbody id="data-table" class="divide-y divide-gray-100">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        async function loadAdminData() {
+            try {
+                // 1. Fetch data.json
+                const response = await fetch('data.json');
+                const data = await response.json();
+                
+                // 2. Update Stats
+                document.getElementById('total-count').innerText = data.length.toLocaleString();
+                
+                const instMap = data.reduce((acc, item) => {
+                    acc[item.Institution] = (acc[item.Institution] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const colls = new Set(data.map(item => item.Collection));
+                document.getElementById('collection-count').innerText = colls.size;
+                document.getElementById('platform-count').innerText = Object.keys(instMap).length;
+
+                // 3. Render Chart
+                new Chart(document.getElementById('instChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(instMap),
+                        datasets: [{
+                            data: Object.values(instMap),
+                            backgroundColor: ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b']
+                        }]
+                    },
+                    options: { plugins: { legend: { position: 'bottom' } } }
+                });
+
+                // 4. Content Audit
+                const missingDesc = data.filter(i => !i.Description).length;
+                const missingDate = data.filter(i => !i.Date).length;
+                
+                document.getElementById('audit-list').innerHTML = `
+                    <div class="flex justify-between p-3 bg-red-50 text-red-700 rounded-lg">
+                        <span>Records missing descriptions:</span>
+                        <span class="font-bold">${missingDesc}</span>
+                    </div>
+                    <div class="flex justify-between p-3 bg-amber-50 text-amber-700 rounded-lg">
+                        <span>Records missing dates:</span>
+                        <span class="font-bold">${missingDate}</span>
+                    </div>
+                `;
+
+                // 5. Populate Table (Last 15 items)
+                const table = document.getElementById('data-table');
+                data.slice(-15).reverse().forEach(item => {
+                    const row = `
+                        <tr class="hover:bg-gray-50 transition">
+                            <td class="p-4 font-medium text-gray-800">${item.Title}</td>
+                            <td class="p-4 text-sm text-gray-500">${item.Collection}</td>
+                            <td class="p-4 text-sm text-gray-500">${item.Institution}</td>
+                            <td class="p-4"><a href="${item.Link}" target="_blank" class="text-blue-600 hover:underline text-sm font-medium">View Item →</a></td>
+                        </tr>
+                    `;
+                    table.innerHTML += row;
+                });
+
+                // 6. Fetch State File
+                const stateRes = await fetch('last_harvest.txt');
+                const stateText = await stateRes.text();
+                document.getElementById('last-update').innerText = `Last Sync: ${stateText}`;
+
+            } catch (err) {
+                console.error("Failed to load data:", err);
+                document.getElementById('last-update').innerText = "Error loading harvest data.";
+            }
+        }
+
+        loadAdminData();
+    </script>
+</body>
+</html>
