@@ -164,6 +164,9 @@
     <span class="topic-icon">📸</span> Photographs
   </div>
 </div>
+<div style="text-align:center; margin: 20px;">
+    <button id="loadMoreBtn" class="btn" style="display:none;" onclick="loadMore()">Load More Results</button>
+</div>
 <div id="itemModal" class="modal" aria-hidden="true">
   <div class="modal-content">
     <span class="close" onclick="closeModal()">&times;</span>
@@ -221,14 +224,26 @@ let data = [];
       elCounter.textContent = "Error loading database.";
     });
 
+let displayLimit = 100; // Keep track of how many to show
+  let lastSearchResults = []; // Keep track of the full list of matches
+
   // 2. Optimized Render Function
   function render(items) {
-    currentFilteredItems = items.slice(0, 100); // Only show first 100 for speed
+    lastSearchResults = items; // Store the full list so "Load More" can access it
+    currentFilteredItems = items.slice(0, displayLimit); 
+    
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
     
     if (items.length === 0) {
         elCounter.textContent = "No matching records found.";
         elResults.innerHTML = '';
+        if (loadMoreBtn) loadMoreBtn.style.display = 'none';
         return;
+    }
+
+    // Show the button only if there are more items left to display
+    if (loadMoreBtn) {
+      loadMoreBtn.style.display = items.length > displayLimit ? 'inline-block' : 'none';
     }
 
     elCounter.textContent = `Showing top ${currentFilteredItems.length} of ${items.length.toLocaleString()} matches`;
@@ -250,29 +265,45 @@ let data = [];
     }).join('');
   }
 
-  // 3. Search Logic
+  // New function for the button click
+  function loadMore() {
+    displayLimit += 100; // Increase the count by 100
+    render(lastSearchResults); // Re-render with the new limit
+  }
+
+  // 3. Search Logic (Resetting the limit on new search)
   elSearch.addEventListener('input', (e) => {
     const query = e.target.value.trim();
+    const topicGrid = document.querySelector('.topic-grid');
     
+    // Reset limit for every new search
+    displayLimit = 100;
+
     if (query.length < 2) {
-      elResults.innerHTML = ""; // Clear results if search is too short
+      elResults.innerHTML = ""; 
+      if (topicGrid) topicGrid.style.display = "grid";
+      document.getElementById('loadMoreBtn').style.display = 'none';
       elCounter.textContent = `Ready to search across ${data.length.toLocaleString()} records`;
       return;
     }
 
-    // Use Fuse.js to search
+    if (topicGrid) topicGrid.style.display = "none";
     const results = fuse.search(query);
-    const matchedItems = results.map(r => r.item);
-    render(matchedItems);
+    render(results.map(r => r.item));
   });
 
-  // 4. Topic Card Helper (Use this for your buttons/cards)
-  function runSearch(term) {
+// 4. Topic Card Helper
+function runSearch(term) {
     elSearch.value = term;
+    
+    // Add this line to hide the cards when a topic is clicked:
+    const topicGrid = document.querySelector('.topic-grid');
+    if (topicGrid) topicGrid.style.display = "none";
+
     const results = fuse.search(term);
     render(results.map(r => r.item));
     elSearch.focus();
-  }
+}
 
   // 5. Modal Logic (Unchanged)
   function openModalByIndex(index) {
