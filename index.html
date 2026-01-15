@@ -212,7 +212,8 @@ let data = [];
       const options = {
         keys: ['Title', 'Description', 'Subject', 'Collection'],
         threshold: 0.3, // 0.0 is perfect match, 1.0 is anything. 0.3 is good for typos.
-        ignoreLocation: true
+        ignoreLocation: true,
+		useExtendedSearch: true
       };
       fuse = new Fuse(data, options);
 
@@ -288,7 +289,11 @@ let displayLimit = 100; // Keep track of how many to show
     }
 
     if (topicGrid) topicGrid.style.display = "none";
-    const results = fuse.search(query);
+    
+    // This part forces Fuse to find EVERY word instead of ANY word
+    const andQuery = query.split(' ').filter(w => w).map(w => `'${w}`).join(' ');
+    const results = fuse.search(andQuery);
+    
     render(results.map(r => r.item));
   });
 
