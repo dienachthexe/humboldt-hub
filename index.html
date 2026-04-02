@@ -205,12 +205,12 @@ let data = [];
       // Clean up dates as we load
       data = jsonData.map(item => ({
         ...item,
-        Date: normalizeYear(item.Date)
+        date: normalizeYear(item.date)
       }));
 
       // Set up the Fuzzy Search Engine
       const options = {
-        keys: ['Title', 'Description', 'Subject', 'Collection'],
+        keys: ['title', 'description', 'subject', 'collection'],
         threshold: 0.3, // 0.0 is perfect match, 1.0 is anything. 0.3 is good for typos.
         ignoreLocation: true,
 		useExtendedSearch: true
@@ -254,11 +254,11 @@ let displayLimit = 100; // Keep track of how many to show
         <div class="result" onclick="openModalByIndex(${index})">
           <img class="thumb" src="${item.Thumbnail}" alt="thumbnail" onerror="this.src='https://img.icons8.com/color/80/document.png'">
           <div>
-            <h3 class="title">${item.Title || "(untitled)"}</h3>
+            <h3 class="title">${item.title || "(untitled)"}</h3>
             <div class="meta">
-              <span class="chip"><strong>${item.Institution}</strong></span>
-              ${item.Collection ? `<span class="chip">Collection: ${item.Collection}</span>` : ""}
-              ${item.Date ? `<span class="chip">Date: ${item.Date}</span>` : ""}
+              <span class="chip"><strong>${item.institution}</strong></span>
+              ${item.collection ? `<span class="chip">Collection: ${item.collection}</span>` : ""}
+              ${item.date ? `<span class="chip">Date: ${item.date}</span>` : ""}
             </div>
           </div>
         </div>
@@ -315,16 +315,16 @@ function runSearch(term) {
     const item = currentFilteredItems[index];
     if (!item) return;
 
-    document.getElementById('modalTitle').textContent = item.Title || "(untitled)";
-    document.getElementById('modalImg').src = item.Thumbnail;
-    document.getElementById('modalLink').href = item.Link || "#";
+    document.getElementById('modalTitle').textContent = item.title || "(untitled)";
+    document.getElementById('modalImg').src = item.thumbnail;
+    document.getElementById('modalLink').href = item.link || "#";
 
     const fields = [
-      { label: 'Description', value: item.Description },
-      { label: 'Subjects', value: item.Subject },
-      { label: 'Collection', value: item.Collection },
-      { label: 'Institution', value: item.Institution },
-      { label: 'Date', value: item.Date }
+      { label: 'Description', value: item.description },
+      { label: 'Subjects', value: item.subject },
+      { label: 'Collection', value: item.collection },
+      { label: 'Institution', value: item.institution },
+      { label: 'Date', value: item.date }
     ];
 
     document.getElementById('modalMeta').innerHTML = fields
