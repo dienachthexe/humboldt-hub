@@ -54,9 +54,32 @@
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                 <h3 class="text-lg font-semibold mb-4">Content Quality Audit</h3>
-                <div id="audit-list" class="space-y-3">
-                </div>
+                <div id="audit-list" class="space-y-3"></div>
             </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h3 class="text-lg font-semibold mb-4">Exports</h3>
+            <div class="flex flex-wrap gap-3">
+                <button id="export-missing-desc" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                    Export Missing Descriptions
+                </button>
+                <button id="export-missing-subjects" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition">
+                    Export Missing Subjects
+                </button>
+                <button id="export-missing-dates" class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition">
+                    Export Missing Dates
+                </button>
+                <button id="export-missing-desc-subjects" class="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition">
+                    Export Missing Descriptions + Subjects
+                </button>
+                <button id="export-subject-counts" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                    Export Subject Frequency
+                </button>
+            </div>
+            <p class="text-sm text-gray-500 mt-3">
+                Downloads are generated directly in your browser from the currently loaded <code>data.json</code>.
+            </p>
         </div>
 
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -74,33 +97,95 @@
                             <th class="p-4 font-semibold">Link</th>
                         </tr>
                     </thead>
-                    <tbody id="data-table" class="divide-y divide-gray-100">
-                    </tbody>
+                    <tbody id="data-table" class="divide-y divide-gray-100"></tbody>
                 </table>
             </div>
         </div>
     </main>
 
     <script>
+        function safeValue(value) {
+            return value === null || value === undefined ? '' : String(value);
+        }
+
+        function isBlank(value) {
+            return safeValue(value).trim() === '';
+        }
+
+        function escapeHtml(value) {
+            return safeValue(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function csvEscape(value) {
+            return `"${safeValue(value).replace(/"/g, '""')}"`;
+        }
+
+        function downloadCSV(filename, rows) {
+            if (!rows || !rows.length) {
+                alert('No matching records found.');
+                return;
+            }
+
+            const headers = Object.keys(rows[0]);
+            const csvContent = [
+                headers.join(','),
+                ...rows.map(row => headers.map(header => csvEscape(row[header])).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            URL.revokeObjectURL(url);
+        }
+
+        function buildExportRows(items, includeDescription = true) {
+            return items.map(item => ({
+                title: safeValue(item.title),
+                collection: safeValue(item.collection),
+                institution: safeValue(item.institution),
+                date: safeValue(item.date),
+                subject: safeValue(item.subject),
+                ...(includeDescription ? { description: safeValue(item.description) } : {}),
+                link: safeValue(item.link)
+            }));
+        }
+
         async function loadAdminData() {
             try {
-                // 1. Fetch data.json
                 const response = await fetch('data.json');
                 const data = await response.json();
-                
-                // 2. Update Stats
+
+                // 1. Update Stats
                 document.getElementById('total-count').innerText = data.length.toLocaleString();
-                
+
                 const instMap = data.reduce((acc, item) => {
-                    acc[item.institution] = (acc[item.institution] || 0) + 1;
+                    const key = safeValue(item.institution).trim() || 'Unknown';
+                    acc[key] = (acc[key] || 0) + 1;
                     return acc;
                 }, {});
 
-                const colls = new Set(data.map(item => item.collection));
-                document.getElementById('collection-count').innerText = colls.size;
-                document.getElementById('platform-count').innerText = Object.keys(instMap).length;
+                const colls = new Set(
+                    data
+                        .map(item => safeValue(item.collection).trim())
+                        .filter(Boolean)
+                );
 
-                // 3. Render Chart
+                document.getElementById('collection-count').innerText = colls.size.toLocaleString();
+                document.getElementById('platform-count').innerText = Object.keys(instMap).length.toLocaleString();
+
+                // 2. Render Chart
                 new Chart(document.getElementById('instChart'), {
                     type: 'doughnut',
                     data: {
@@ -110,29 +195,43 @@
                             backgroundColor: ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b']
                         }]
                     },
-                    options: { plugins: { legend: { position: 'bottom' } } }
+                    options: {
+                        plugins: {
+                            legend: { position: 'bottom' }
+                        }
+                    }
                 });
 
-                // 4. Content Audit
-                const missingDesc = data.filter(i => !i.description).length;
-                const missingDate = data.filter(i => !i.date).length;
-                
+                // 3. Content Audit
+                const missingDescItems = data.filter(i => isBlank(i.description));
+                const missingDateItems = data.filter(i => isBlank(i.date));
+                const missingSubjectItems = data.filter(i => isBlank(i.subject));
+                const missingDescAndSubjectItems = data.filter(i => isBlank(i.description) && isBlank(i.subject));
+
                 document.getElementById('audit-list').innerHTML = `
                     <div class="flex justify-between p-3 bg-red-50 text-red-700 rounded-lg">
                         <span>Records missing descriptions:</span>
-                        <span class="font-bold">${missingDesc}</span>
+                        <span class="font-bold">${missingDescItems.length.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between p-3 bg-orange-50 text-orange-700 rounded-lg">
+                        <span>Records missing subjects:</span>
+                        <span class="font-bold">${missingSubjectItems.length.toLocaleString()}</span>
                     </div>
                     <div class="flex justify-between p-3 bg-amber-50 text-amber-700 rounded-lg">
                         <span>Records missing dates:</span>
-                        <span class="font-bold">${missingDate}</span>
+                        <span class="font-bold">${missingDateItems.length.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between p-3 bg-slate-100 text-slate-700 rounded-lg">
+                        <span>Records missing descriptions and subjects:</span>
+                        <span class="font-bold">${missingDescAndSubjectItems.length.toLocaleString()}</span>
                     </div>
                 `;
 
-                // --- NEW: Subject Analysis Logic ---
+                // 4. Subject Analysis
                 const subjectCounts = {};
                 data.forEach(item => {
-                    if (item.subject) {
-                        const tags = item.subject.split(/[;,|]/); 
+                    if (!isBlank(item.subject)) {
+                        const tags = safeValue(item.subject).split(/[;,|]/);
                         tags.forEach(tag => {
                             const clean = tag.trim();
                             if (clean.length > 2) {
@@ -143,12 +242,12 @@
                 });
 
                 const sortedSubjects = Object.entries(subjectCounts)
-                    .sort(([,a], [,b]) => b - a)
+                    .sort(([, a], [, b]) => b - a)
                     .slice(0, 15);
 
                 document.getElementById('subject-list').innerHTML = sortedSubjects.map(([name, count]) => `
                     <div class="flex justify-between items-center p-2 hover:bg-gray-50 rounded border-b border-gray-100 last:border-0 transition-colors">
-                        <span class="text-sm text-gray-700 truncate mr-2" title="${name}">${name}</span>
+                        <span class="text-sm text-gray-700 truncate mr-2" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
                         <span class="text-xs font-mono font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
                             ${count.toLocaleString()}
                         </span>
@@ -157,26 +256,84 @@
 
                 // 5. Populate Table (Last 15 items)
                 const table = document.getElementById('data-table');
+                table.innerHTML = '';
+
                 data.slice(-15).reverse().forEach(item => {
+                    const linkHtml = !isBlank(item.link)
+                        ? `<a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline text-sm font-medium">View Item →</a>`
+                        : `<span class="text-sm text-gray-400">No link</span>`;
+
                     const row = `
                         <tr class="hover:bg-gray-50 transition">
-                            <td class="p-4 font-medium text-gray-800">${item.title}</td>
-                            <td class="p-4 text-sm text-gray-500">${item.collection}</td>
-                            <td class="p-4 text-sm text-gray-500">${item.institution}</td>
-                            <td class="p-4"><a href="${item.link}" target="_blank" class="text-blue-600 hover:underline text-sm font-medium">View Item →</a></td>
+                            <td class="p-4 font-medium text-gray-800">${escapeHtml(item.title)}</td>
+                            <td class="p-4 text-sm text-gray-500">${escapeHtml(item.collection)}</td>
+                            <td class="p-4 text-sm text-gray-500">${escapeHtml(item.institution)}</td>
+                            <td class="p-4">${linkHtml}</td>
                         </tr>
                     `;
                     table.innerHTML += row;
                 });
 
-                // 6. Fetch State File
+                // 6. Search filter for visible table rows
+                const searchInput = document.getElementById('search');
+                searchInput.addEventListener('input', function () {
+                    const query = this.value.toLowerCase().trim();
+                    const rows = table.querySelectorAll('tr');
+
+                    rows.forEach((row) => {
+                        const text = row.textContent.toLowerCase();
+                        row.style.display = text.includes(query) ? '' : 'none';
+                    });
+                });
+
+                // 7. Export button handlers
+                document.getElementById('export-missing-desc').addEventListener('click', () => {
+                    downloadCSV(
+                        'records_missing_descriptions.csv',
+                        buildExportRows(missingDescItems)
+                    );
+                });
+
+                document.getElementById('export-missing-subjects').addEventListener('click', () => {
+                    downloadCSV(
+                        'records_missing_subjects.csv',
+                        buildExportRows(missingSubjectItems)
+                    );
+                });
+
+                document.getElementById('export-missing-dates').addEventListener('click', () => {
+                    downloadCSV(
+                        'records_missing_dates.csv',
+                        buildExportRows(missingDateItems)
+                    );
+                });
+
+                document.getElementById('export-missing-desc-subjects').addEventListener('click', () => {
+                    downloadCSV(
+                        'records_missing_descriptions_and_subjects.csv',
+                        buildExportRows(missingDescAndSubjectItems)
+                    );
+                });
+
+                document.getElementById('export-subject-counts').addEventListener('click', () => {
+                    const subjectRows = Object.entries(subjectCounts)
+                        .sort(([, a], [, b]) => b - a)
+                        .map(([subject, count]) => ({
+                            subject,
+                            count
+                        }));
+
+                    downloadCSV('subject_frequency_report.csv', subjectRows);
+                });
+
+                // 8. Fetch State File
                 const stateRes = await fetch('last_harvest.txt');
                 const stateText = await stateRes.text();
                 document.getElementById('last-update').innerText = `Last Sync: ${stateText}`;
 
             } catch (err) {
-                console.error("Failed to load data:", err);
-                document.getElementById('last-update').innerText = "Error loading harvest data.";
+                console.error('Failed to load data:', err);
+                document.getElementById('last-update').innerText = 'Error loading harvest data.';
             }
         }
 
