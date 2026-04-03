@@ -160,10 +160,10 @@
                 data.slice(-15).reverse().forEach(item => {
                     const row = `
                         <tr class="hover:bg-gray-50 transition">
-                            <td class="p-4 font-medium text-gray-800">${item.Title}</td>
-                            <td class="p-4 text-sm text-gray-500">${item.Collection}</td>
-                            <td class="p-4 text-sm text-gray-500">${item.Institution}</td>
-                            <td class="p-4"><a href="${item.Link}" target="_blank" class="text-blue-600 hover:underline text-sm font-medium">View Item →</a></td>
+                            <td class="p-4 font-medium text-gray-800">${item.title}</td>
+                            <td class="p-4 text-sm text-gray-500">${item["collection name"]}</td>
+                            <td class="p-4 text-sm text-gray-500">${item.institution}</td>
+                            <td class="p-4"><a href="${item.link}" target="_blank" class="text-blue-600 hover:underline text-sm font-medium">View Item →</a></td>
                         </tr>
                     `;
                     table.innerHTML += row;
