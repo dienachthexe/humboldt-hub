@@ -117,11 +117,11 @@
     }
     .close { position: absolute; right: 20px; top: 15px; font-size: 32px; cursor: pointer; color: #999; line-height: 1; }
     .close:hover { color: var(--primary); }
-    
+
     .modal-img { width: 100%; height: auto; max-height: 400px; object-fit: contain; background: #f8f9fa; border-radius: 8px; border: 1px solid #eee; }
     .modal-info h2 { margin: 0 0 10px 0; color: var(--primary); font-size: 1.5rem; }
     .meta-label { font-weight: 700; color: #6b7785; text-transform: uppercase; font-size: 0.75rem; margin-top: 15px; letter-spacing: 0.5px; }
-    
+
     .btn { 
         display: inline-block; 
         background: var(--primary); 
@@ -144,7 +144,7 @@
   <h1>Digital Humboldt</h1>
   <p>Search the Historical Collections of Humboldt County</p>
   <div class="search-container">
-    <input id="search" type="text" placeholder="Search by title, subject, or description…"/>
+    <input id="search" type="text" placeholder="Search by title, subject, creator, or description…"/>
   </div>
   <div id="counter">Loading records…</div>
 </header>
@@ -195,6 +195,9 @@ let data = [];
     return m ? m[0] : String(d);
   };
 
+  const fallbackThumb = 'https://img.icons8.com/color/80/document.png';
+  const thumbOrFallback = item => (item.thumbnail && String(item.thumbnail).trim() !== "" ? item.thumbnail : fallbackThumb);
+
   // 1. Load Data and Initialize Search Engine
   fetch('data.json')
     .then(response => {
@@ -210,10 +213,10 @@ let data = [];
 
       // Set up the Fuzzy Search Engine
       const options = {
-        keys: ['title', 'description', 'subject', 'collection'],
+        keys: ['title', 'description', 'subject', 'collection', 'creator'],
         threshold: 0.3, // 0.0 is perfect match, 1.0 is anything. 0.3 is good for typos.
         ignoreLocation: true,
-		useExtendedSearch: true
+        useExtendedSearch: true
       };
       fuse = new Fuse(data, options);
 
@@ -232,9 +235,9 @@ let displayLimit = 100; // Keep track of how many to show
   function render(items) {
     lastSearchResults = items; // Store the full list so "Load More" can access it
     currentFilteredItems = items.slice(0, displayLimit); 
-    
+
     const loadMoreBtn = document.getElementById('loadMoreBtn');
-    
+
     if (items.length === 0) {
         elCounter.textContent = "No matching records found.";
         elResults.innerHTML = '';
@@ -252,11 +255,12 @@ let displayLimit = 100; // Keep track of how many to show
     elResults.innerHTML = currentFilteredItems.map((item, index) => {
       return `
         <div class="result" onclick="openModalByIndex(${index})">
-          <img class="thumb" src="${item.Thumbnail}" alt="thumbnail" onerror="this.src='https://img.icons8.com/color/80/document.png'">
+          <img class="thumb" src="${thumbOrFallback(item)}" alt="thumbnail" onerror="this.src='${fallbackThumb}'">
           <div>
             <h3 class="title">${item.title || "(untitled)"}</h3>
             <div class="meta">
               <span class="chip"><strong>${item.institution}</strong></span>
+              ${item.creator ? `<span class="chip">Creator: ${item.creator}</span>` : ""}
               ${item.collection ? `<span class="chip">Collection: ${item.collection}</span>` : ""}
               ${item.date ? `<span class="chip">Date: ${item.date}</span>` : ""}
             </div>
@@ -276,7 +280,7 @@ let displayLimit = 100; // Keep track of how many to show
   elSearch.addEventListener('input', (e) => {
     const query = e.target.value.trim();
     const topicGrid = document.querySelector('.topic-grid');
-    
+
     // Reset limit for every new search
     displayLimit = 100;
 
@@ -289,18 +293,18 @@ let displayLimit = 100; // Keep track of how many to show
     }
 
     if (topicGrid) topicGrid.style.display = "none";
-    
+
     // This part forces Fuse to find EVERY word instead of ANY word
     const andQuery = query.split(' ').filter(w => w).map(w => `'${w}`).join(' ');
     const results = fuse.search(andQuery);
-    
+
     render(results.map(r => r.item));
   });
 
 // 4. Topic Card Helper
 function runSearch(term) {
     elSearch.value = term;
-    
+
     // Add this line to hide the cards when a topic is clicked:
     const topicGrid = document.querySelector('.topic-grid');
     if (topicGrid) topicGrid.style.display = "none";
@@ -310,16 +314,17 @@ function runSearch(term) {
     elSearch.focus();
 }
 
-  // 5. Modal Logic (Unchanged)
+  // 5. Modal Logic
   function openModalByIndex(index) {
     const item = currentFilteredItems[index];
     if (!item) return;
 
     document.getElementById('modalTitle').textContent = item.title || "(untitled)";
-    document.getElementById('modalImg').src = item.thumbnail;
+    document.getElementById('modalImg').src = thumbOrFallback(item);
     document.getElementById('modalLink').href = item.link || "#";
 
     const fields = [
+      { label: 'Creator', value: item.creator },
       { label: 'Description', value: item.description },
       { label: 'Subjects', value: item.subject },
       { label: 'Collection', value: item.collection },
@@ -330,7 +335,7 @@ function runSearch(term) {
     document.getElementById('modalMeta').innerHTML = fields
       .filter(f => f.value && String(f.value).trim() !== "")
       .map(f => `<div class="meta-label">${f.label}</div><div>${f.value}</div>`).join('');
-    
+
     modal.style.display = "block";
     modal.setAttribute('aria-hidden', 'false');
   }
