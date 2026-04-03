@@ -92,11 +92,11 @@
                 document.getElementById('total-count').innerText = data.length.toLocaleString();
                 
                 const instMap = data.reduce((acc, item) => {
-                    acc[item.Institution] = (acc[item.Institution] || 0) + 1;
+                    acc[item.institution] = (acc[item.institution] || 0) + 1;
                     return acc;
                 }, {});
 
-                const colls = new Set(data.map(item => item.Collection));
+                const colls = new Set(data.map(item => item.collection));
                 document.getElementById('collection-count').innerText = colls.size;
                 document.getElementById('platform-count').innerText = Object.keys(instMap).length;
 
@@ -114,8 +114,8 @@
                 });
 
                 // 4. Content Audit
-                const missingDesc = data.filter(i => !i.Description).length;
-                const missingDate = data.filter(i => !i.Date).length;
+                const missingDesc = data.filter(i => !i.description).length;
+                const missingDate = data.filter(i => !i.date).length;
                 
                 document.getElementById('audit-list').innerHTML = `
                     <div class="flex justify-between p-3 bg-red-50 text-red-700 rounded-lg">
@@ -131,8 +131,8 @@
                 // --- NEW: Subject Analysis Logic ---
                 const subjectCounts = {};
                 data.forEach(item => {
-                    if (item.Subject) {
-                        const tags = item.Subject.split(/[;,|]/); 
+                    if (item.subject) {
+                        const tags = item.subject.split(/[;,|]/); 
                         tags.forEach(tag => {
                             const clean = tag.trim();
                             if (clean.length > 2) {
@@ -161,7 +161,7 @@
                     const row = `
                         <tr class="hover:bg-gray-50 transition">
                             <td class="p-4 font-medium text-gray-800">${item.title}</td>
-                            <td class="p-4 text-sm text-gray-500">${item["collection name"]}</td>
+                            <td class="p-4 text-sm text-gray-500">${item.collection}</td>
                             <td class="p-4 text-sm text-gray-500">${item.institution}</td>
                             <td class="p-4"><a href="${item.link}" target="_blank" class="text-blue-600 hover:underline text-sm font-medium">View Item →</a></td>
                         </tr>
