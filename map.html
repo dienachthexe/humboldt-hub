@@ -155,21 +155,23 @@
       markerLayer = L.layerGroup().addTo(map);
     }
 
-    function popupHtml(item) {
-      const creator = safeText(item.creator);
-      const collection = safeText(item.collection);
-      const date = safeText(item.date);
-      const type = safeText(item.record_type);
+function popupHtml(item) {
+  const creator = safeText(item.creator);
+  const collection = safeText(item.collection);
+  const date = safeText(item.date);
+  const type = safeText(item.record_type);
+  const thumb = safeText(item.thumbnail);
 
-      return `
-        <div class="popup-title">${item.title || "(untitled)"}</div>
-        ${creator ? `<div><strong>Creator:</strong> ${creator}</div>` : ""}
-        ${collection ? `<div><strong>Collection:</strong> ${collection}</div>` : ""}
-        ${date ? `<div><strong>Date:</strong> ${date}</div>` : ""}
-        ${type ? `<div><strong>Type:</strong> ${type}</div>` : ""}
-        <a class="popup-link" href="${item.link || '#'}" target="_blank" rel="noopener">View Original Record</a>
-      `;
-    }
+  return `
+    ${thumb ? `<img src="${thumb}" alt="Thumbnail for ${escapeHtml(item.title || "record")}" style="width:100%; max-width:220px; height:auto; border-radius:8px; margin-bottom:8px; display:block;" onerror="this.style.display='none';">` : ""}
+    <div class="popup-title">${item.title || "(untitled)"}</div>
+    ${creator ? `<div><strong>Creator:</strong> ${creator}</div>` : ""}
+    ${collection ? `<div><strong>Collection:</strong> ${collection}</div>` : ""}
+    ${date ? `<div><strong>Date:</strong> ${date}</div>` : ""}
+    ${type ? `<div><strong>Type:</strong> ${type}</div>` : ""}
+    <a class="popup-link" href="${item.link || '#'}" target="_blank" rel="noopener">View Original Record</a>
+  `;
+}
 
     function renderCollections(records) {
       const counts = {};
