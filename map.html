@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Digital Humboldt Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <style>
+    :root { --primary:#004C46; --accent:#F2A900; --text:#2c3e50; --light-bg:#f7f9fb; --panel-bg:#fff; --border:#dfe5eb; --muted:#6b7785; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--text); background:var(--light-bg); }
+    header { padding:18px 20px 12px; background:#fff; border-bottom:1px solid var(--border); }
+    h1 { margin:0 0 6px 0; color:var(--primary); font-size:1.9rem; }
+    .subhead { margin:0; color:var(--muted); }
+    .nav { margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; }
+    .nav a { text-decoration:none; color:var(--primary); font-weight:600; background:#eef4f3; padding:8px 12px; border-radius:8px; }
+    .nav a.active { background:var(--primary); color:#fff; }
+    .layout { display:grid; grid-template-columns:360px 1fr; min-height:calc(100vh - 116px); }
+    .sidebar { background:var(--panel-bg); border-right:1px solid var(--border); padding:16px; overflow-y:auto; }
+    .map-wrap { min-height:calc(100vh - 116px); position:relative; }
+    #map { width:100%; height:100%; min-height:calc(100vh - 116px); }
+    .panel { border:1px solid var(--border); border-radius:12px; padding:14px; background:#fff; margin-bottom:14px; }
+    .panel h2 { font-size:1rem; margin:0 0 10px 0; color:var(--primary); }
+    .search-row { display:grid; grid-template-columns:1fr auto auto; gap:8px; }
+    #searchInput { width:100%; padding:12px 14px; border:2px solid #d8dee6; border-radius:10px; font-size:1rem; outline:none; }
+    #searchInput:focus { border-color:var(--primary); }
+    .btn { border:none; background:var(--primary); color:#fff; padding:12px 14px; border-radius:10px; font-weight:600; cursor:pointer; }
+    .btn.secondary { background:#e9eef3; color:var(--text); }
+    .small { font-size:.9rem; color:var(--muted); margin-top:8px; }
+    .collection-actions { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+    .linkish { border:none; background:transparent; color:var(--primary); cursor:pointer; padding:0; font-weight:600; }
+    #collectionList { max-height:280px; overflow-y:auto; border-top:1px solid var(--border); padding-top:10px; }
+    .collection-item { display:grid; grid-template-columns:20px 1fr auto; gap:8px; align-items:start; padding:5px 0; font-size:.95rem; }
+    .count-badge { color:var(--muted); font-size:.85rem; white-space:nowrap; }
+    .results-list { max-height:34vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+    .result-card { border:1px solid var(--border); border-radius:10px; padding:10px; background:#fcfdff; cursor:pointer; }
+    .result-card:hover { border-color:var(--primary); background:#f4f8f7; }
+    .result-title { font-weight:700; color:var(--primary); margin-bottom:6px; line-height:1.3; }
+    .meta-line { font-size:.88rem; color:var(--muted); margin-bottom:4px; }
+    .pill { display:inline-block; font-size:.8rem; background:#eef2f6; padding:3px 8px; border-radius:999px; margin:3px 6px 0 0; }
+    .leaflet-popup-content { line-height:1.45; }
+    .popup-title { font-weight:700; color:var(--primary); margin-bottom:6px; }
+    .popup-link { display:inline-block; margin-top:8px; color:var(--primary); font-weight:600; text-decoration:none; }
+    .empty { color:var(--muted); font-style:italic; }
+    @media (max-width:900px) {
+      .layout { grid-template-columns:1fr; }
+      .sidebar { border-right:none; border-bottom:1px solid var(--border); }
+      .map-wrap, #map { min-height:60vh; }
+      .search-row { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Digital Humboldt Map</h1>
+    <p class="subhead">Explore records geographically, then filter by keyword and collection.</p>
+    <nav class="nav">
+      <a href="index.html">Search</a>
+      <a href="map.html" class="active">Map</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <section class="panel">
+        <h2>Search</h2>
+        <div class="search-row">
+          <input id="searchInput" type="text" placeholder="Search titles, creators, subjects, collections…" />
+          <button id="searchBtn" class="btn">Search</button>
+          <button id="resetBtn" class="btn secondary">Reset</button>
+        </div>
+        <div class="small" id="statusText">Loading map data…</div>
+      </section>
+
+      <section class="panel">
+        <h2>Collections</h2>
+        <div class="collection-actions">
+          <button id="selectAllBtn" class="linkish">Select all</button>
+          <button id="clearAllBtn" class="linkish">Clear all</button>
+        </div>
+        <div id="collectionList"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Visible Results</h2>
+        <div class="small" id="resultsCount">0 mapped records</div>
+        <div id="resultsList" class="results-list"></div>
+      </section>
+    </aside>
+
+    <main class="map-wrap">
+      <div id="map"></div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <script>
+    let allMappedRecords = [];
+    let activeRecords = [];
+    let activeCollections = new Set();
+    let markerLayer;
+    let map;
+    const markerIndex = new Map();
+
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const clearAllBtn = document.getElementById('clearAllBtn');
+    const collectionList = document.getElementById('collectionList');
+    const resultsList = document.getElementById('resultsList');
+    const resultsCount = document.getElementById('resultsCount');
+    const statusText = document.getElementById('statusText');
+
+    function normalizeYear(d) {
+      if (!d) return "";
+      const m = String(d).match(/(19|20)\d{2}/);
+      return m ? m[0] : String(d);
+    }
+
+    function safeText(value) {
+      return value && String(value).trim() ? String(value) : "";
+    }
+
+    function parseCoord(value) {
+      if (value === null || value === undefined) return null;
+      const cleaned = String(value).split("JS:")[0].trim();
+      const parsed = parseFloat(cleaned);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function buildSearchBlob(item) {
+      return [
+        item.title, item.creator, item.description, item.subject,
+        item.collection, item.record_type, item.institution
+      ].filter(Boolean).join(" ").toLowerCase();
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function createMap() {
+      map = L.map('map', { preferCanvas: true }).setView([40.8, -124.16], 11);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      markerLayer = L.layerGroup().addTo(map);
+    }
+
+    function popupHtml(item) {
+      const creator = safeText(item.creator);
+      const collection = safeText(item.collection);
+      const date = safeText(item.date);
+      const type = safeText(item.record_type);
+
+      return `
+        <div class="popup-title">${item.title || "(untitled)"}</div>
+        ${creator ? `<div><strong>Creator:</strong> ${creator}</div>` : ""}
+        ${collection ? `<div><strong>Collection:</strong> ${collection}</div>` : ""}
+        ${date ? `<div><strong>Date:</strong> ${date}</div>` : ""}
+        ${type ? `<div><strong>Type:</strong> ${type}</div>` : ""}
+        <a class="popup-link" href="${item.link || '#'}" target="_blank" rel="noopener">View Original Record</a>
+      `;
+    }
+
+    function renderCollections(records) {
+      const counts = {};
+      records.forEach(item => {
+        const key = item.collection || "Uncategorized";
+        counts[key] = (counts[key] || 0) + 1;
+      });
+
+      const names = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+
+      if (activeCollections.size === 0) {
+        names.forEach(name => activeCollections.add(name));
+      }
+
+      collectionList.innerHTML = names.map(name => `
+        <label class="collection-item">
+          <input type="checkbox" value="${escapeHtml(name)}" ${activeCollections.has(name) ? "checked" : ""}>
+          <span>${escapeHtml(name)}</span>
+          <span class="count-badge">${counts[name]}</span>
+        </label>
+      `).join("");
+
+      collectionList.querySelectorAll('input[type="checkbox"]').forEach(box => {
+        box.addEventListener('change', () => {
+          if (box.checked) activeCollections.add(box.value);
+          else activeCollections.delete(box.value);
+          applyFilters();
+        });
+      });
+    }
+
+    function renderResultsList(items) {
+      resultsCount.textContent = `${items.length.toLocaleString()} mapped record${items.length === 1 ? "" : "s"} visible`;
+
+      if (!items.length) {
+        resultsList.innerHTML = '<div class="empty">No mapped records match the current filters.</div>';
+        return;
+      }
+
+      const topItems = items.slice(0, 100);
+      resultsList.innerHTML = topItems.map((item, index) => `
+        <div class="result-card" data-id="${escapeHtml(item.hash_id || String(index))}">
+          <div class="result-title">${escapeHtml(item.title || "(untitled)")}</div>
+          ${item.creator ? `<div class="meta-line"><strong>Creator:</strong> ${escapeHtml(item.creator)}</div>` : ""}
+          <div class="meta-line">
+            ${item.collection ? `<span class="pill">${escapeHtml(item.collection)}</span>` : ""}
+            ${item.date ? `<span class="pill">${escapeHtml(item.date)}</span>` : ""}
+            ${item.record_type ? `<span class="pill">${escapeHtml(item.record_type)}</span>` : ""}
+          </div>
+        </div>
+      `).join("");
+
+      resultsList.querySelectorAll('.result-card').forEach((card, idx) => {
+        card.addEventListener('click', () => {
+          const item = topItems[idx];
+          const marker = markerIndex.get(item.__markerKey);
+          if (marker) {
+            map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15), { animate: true });
+            marker.openPopup();
+          }
+        });
+      });
+    }
+
+    function drawMarkers(items) {
+      markerLayer.clearLayers();
+      markerIndex.clear();
+      if (!items.length) return;
+
+      const bounds = [];
+      items.forEach(item => {
+        const marker = L.circleMarker([item.latitude_num, item.longitude_num], {
+          radius: 6, color: '#004C46', weight: 1.5, fillColor: '#F2A900', fillOpacity: 0.9
+        }).bindPopup(popupHtml(item));
+        marker.addTo(markerLayer);
+        markerIndex.set(item.__markerKey, marker);
+        bounds.push([item.latitude_num, item.longitude_num]);
+      });
+
+      if (bounds.length === 1) map.setView(bounds[0], 15);
+      else if (bounds.length > 1) map.fitBounds(bounds, { padding: [30, 30] });
+    }
+
+    function applyFilters() {
+      const q = searchInput.value.trim().toLowerCase();
+      activeRecords = allMappedRecords.filter(item => {
+        const collectionName = item.collection || "Uncategorized";
+        const collectionOk = activeCollections.has(collectionName);
+        const textOk = !q || item.__searchBlob.includes(q);
+        return collectionOk && textOk;
+      });
+
+      drawMarkers(activeRecords);
+      renderResultsList(activeRecords);
+      statusText.textContent = `Showing ${activeRecords.length.toLocaleString()} mapped records`;
+    }
+
+    function resetFilters() {
+      searchInput.value = "";
+      activeCollections.clear();
+      const names = [...new Set(allMappedRecords.map(item => item.collection || "Uncategorized"))];
+      names.forEach(name => activeCollections.add(name));
+      collectionList.querySelectorAll('input[type="checkbox"]').forEach(box => { box.checked = true; });
+      applyFilters();
+    }
+
+    async function loadData() {
+      try {
+        const response = await fetch('data.json');
+        if (!response.ok) throw new Error('Could not load data.json');
+        const raw = await response.json();
+
+        allMappedRecords = raw.map((item, index) => {
+          const lat = parseCoord(item.latitude);
+          const lon = parseCoord(item.longitude);
+          return {
+            ...item,
+            date: normalizeYear(item.date),
+            latitude_num: lat,
+            longitude_num: lon,
+            __searchBlob: buildSearchBlob(item),
+            __markerKey: item.hash_id || `marker-${index}`
+          };
+        }).filter(item => item.latitude_num !== null && item.longitude_num !== null);
+
+        renderCollections(allMappedRecords);
+        applyFilters();
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = "Error loading map data.";
+        resultsList.innerHTML = '<div class="empty">Could not load data.json.</div>';
+      }
+    }
+
+    createMap();
+    loadData();
+
+    searchBtn.addEventListener('click', applyFilters);
+    searchInput.addEventListener('input', applyFilters);
+    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyFilters(); });
+    resetBtn.addEventListener('click', resetFilters);
+
+    selectAllBtn.addEventListener('click', () => {
+      collectionList.querySelectorAll('input[type="checkbox"]').forEach(box => {
+        box.checked = true;
+        activeCollections.add(box.value);
+      });
+      applyFilters();
+    });
+
+    clearAllBtn.addEventListener('click', () => {
+      collectionList.querySelectorAll('input[type="checkbox"]').forEach(box => { box.checked = false; });
+      activeCollections.clear();
+      applyFilters();
+    });
+  </script>
+</body>
+</html>
