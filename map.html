@@ -20,17 +20,17 @@
     .map-wrap { min-height:calc(100vh - 116px); position:relative; }
     #map { width:100%; height:100%; min-height:calc(100vh - 116px); }
     .panel { border:1px solid var(--border); border-radius:12px; padding:14px; background:#fff; margin-bottom:14px; }
-    .panel h2 { font-size:1rem; margin:0 0 10px 0; color:var(--primary); }
+    .panel h2 { font-size:1rem; margin:0; color:var(--primary); }
     .search-row { display:grid; grid-template-columns:1fr auto auto; gap:8px; }
     #searchInput { width:100%; padding:12px 14px; border:2px solid #d8dee6; border-radius:10px; font-size:1rem; outline:none; }
     #searchInput:focus { border-color:var(--primary); }
     .btn { border:none; background:var(--primary); color:#fff; padding:12px 14px; border-radius:10px; font-weight:600; cursor:pointer; }
     .btn.secondary { background:#e9eef3; color:var(--text); }
     .small { font-size:.9rem; color:var(--muted); margin-top:8px; }
-    .collection-actions { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+    .filter-actions { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
     .linkish { border:none; background:transparent; color:var(--primary); cursor:pointer; padding:0; font-weight:600; }
-    #collectionList { max-height:280px; overflow-y:auto; border-top:1px solid var(--border); padding-top:10px; }
-    .collection-item { display:grid; grid-template-columns:20px 1fr auto; gap:8px; align-items:start; padding:5px 0; font-size:.95rem; }
+    .filter-list { max-height:220px; overflow-y:auto; border-top:1px solid var(--border); padding-top:10px; }
+    .filter-item { display:grid; grid-template-columns:20px 1fr auto; gap:8px; align-items:start; padding:5px 0; font-size:.95rem; }
     .count-badge { color:var(--muted); font-size:.85rem; white-space:nowrap; }
     .results-list { max-height:34vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
     .result-card { border:1px solid var(--border); border-radius:10px; padding:10px; background:#fcfdff; cursor:pointer; }
@@ -42,6 +42,11 @@
     .popup-title { font-weight:700; color:var(--primary); margin-bottom:6px; }
     .popup-link { display:inline-block; margin-top:8px; color:var(--primary); font-weight:600; text-decoration:none; }
     .empty { color:var(--muted); font-style:italic; }
+    .collapsible-header { display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none; }
+    .collapsible-header button { border:none; background:transparent; color:var(--primary); font-size:1.1rem; cursor:pointer; padding:0; font-weight:700; }
+    .collapsible-body { margin-top:10px; }
+    .collapsed .collapsible-body { display:none; }
+    .legend-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:middle; border:1px solid rgba(0,0,0,.15); }
     @media (max-width:900px) {
       .layout { grid-template-columns:1fr; }
       .sidebar { border-right:none; border-bottom:1px solid var(--border); }
@@ -72,13 +77,46 @@
         <div class="small" id="statusText">Loading map data…</div>
       </section>
 
-      <section class="panel">
-        <h2>Collections</h2>
-        <div class="collection-actions">
-          <button id="selectAllBtn" class="linkish">Select all</button>
-          <button id="clearAllBtn" class="linkish">Clear all</button>
+      <section class="panel" id="institutionPanel">
+        <div class="collapsible-header" data-target="institutionBody">
+          <h2>Institutions</h2>
+          <button type="button" aria-label="Toggle Institutions">−</button>
         </div>
-        <div id="collectionList"></div>
+        <div class="collapsible-body" id="institutionBody">
+          <div class="filter-actions">
+            <button id="selectAllInstitutionsBtn" class="linkish">Select all</button>
+            <button id="clearAllInstitutionsBtn" class="linkish">Clear all</button>
+          </div>
+          <div id="institutionList" class="filter-list"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="recordTypePanel">
+        <div class="collapsible-header" data-target="recordTypeBody">
+          <h2>Record Types</h2>
+          <button type="button" aria-label="Toggle Record Types">−</button>
+        </div>
+        <div class="collapsible-body" id="recordTypeBody">
+          <div class="filter-actions">
+            <button id="selectAllRecordTypesBtn" class="linkish">Select all</button>
+            <button id="clearAllRecordTypesBtn" class="linkish">Clear all</button>
+          </div>
+          <div id="recordTypeList" class="filter-list"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="collectionPanel">
+        <div class="collapsible-header" data-target="collectionBody">
+          <h2>Collections</h2>
+          <button type="button" aria-label="Toggle Collections">−</button>
+        </div>
+        <div class="collapsible-body" id="collectionBody">
+          <div class="filter-actions">
+            <button id="selectAllCollectionsBtn" class="linkish">Select all</button>
+            <button id="clearAllCollectionsBtn" class="linkish">Clear all</button>
+          </div>
+          <div id="collectionList" class="filter-list"></div>
+        </div>
       </section>
 
       <section class="panel">
@@ -98,20 +136,36 @@
   <script>
     let allMappedRecords = [];
     let activeRecords = [];
+    let activeInstitutions = new Set();
+    let activeRecordTypes = new Set();
     let activeCollections = new Set();
     let markerLayer;
     let map;
     const markerIndex = new Map();
 
+    const institutionColors = {};
+    const colorPalette = [
+      '#1f77b4', '#d62728', '#2ca02c', '#9467bd', '#ff7f0e',
+      '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#7f7f7f',
+      '#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f'
+    ];
+
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
     const resetBtn = document.getElementById('resetBtn');
-    const selectAllBtn = document.getElementById('selectAllBtn');
-    const clearAllBtn = document.getElementById('clearAllBtn');
+    const institutionList = document.getElementById('institutionList');
+    const recordTypeList = document.getElementById('recordTypeList');
     const collectionList = document.getElementById('collectionList');
     const resultsList = document.getElementById('resultsList');
     const resultsCount = document.getElementById('resultsCount');
     const statusText = document.getElementById('statusText');
+
+    const selectAllInstitutionsBtn = document.getElementById('selectAllInstitutionsBtn');
+    const clearAllInstitutionsBtn = document.getElementById('clearAllInstitutionsBtn');
+    const selectAllRecordTypesBtn = document.getElementById('selectAllRecordTypesBtn');
+    const clearAllRecordTypesBtn = document.getElementById('clearAllRecordTypesBtn');
+    const selectAllCollectionsBtn = document.getElementById('selectAllCollectionsBtn');
+    const clearAllCollectionsBtn = document.getElementById('clearAllCollectionsBtn');
 
     function normalizeYear(d) {
       if (!d) return "";
@@ -155,52 +209,67 @@
       markerLayer = L.layerGroup().addTo(map);
     }
 
-function popupHtml(item) {
-  const creator = safeText(item.creator);
-  const collection = safeText(item.collection);
-  const date = safeText(item.date);
-  const type = safeText(item.record_type);
-  const thumb = safeText(item.thumbnail);
+    function getInstitutionColor(institution) {
+      const key = institution || "Unknown Institution";
+      if (!institutionColors[key]) {
+        const index = Object.keys(institutionColors).length % colorPalette.length;
+        institutionColors[key] = colorPalette[index];
+      }
+      return institutionColors[key];
+    }
 
-  return `
-    ${thumb ? `<img src="${thumb}" alt="Thumbnail for ${escapeHtml(item.title || "record")}" style="width:100%; max-width:220px; height:auto; border-radius:8px; margin-bottom:8px; display:block;" onerror="this.style.display='none';">` : ""}
-    <div class="popup-title">${item.title || "(untitled)"}</div>
-    ${creator ? `<div><strong>Creator:</strong> ${creator}</div>` : ""}
-    ${collection ? `<div><strong>Collection:</strong> ${collection}</div>` : ""}
-    ${date ? `<div><strong>Date:</strong> ${date}</div>` : ""}
-    ${type ? `<div><strong>Type:</strong> ${type}</div>` : ""}
-    <a class="popup-link" href="${item.link || '#'}" target="_blank" rel="noopener">View Original Record</a>
-  `;
-}
+    function popupHtml(item) {
+      const creator = safeText(item.creator);
+      const collection = safeText(item.collection);
+      const date = safeText(item.date);
+      const type = safeText(item.record_type);
+      const thumb = safeText(item.thumbnail);
 
-    function renderCollections(records) {
+      return `
+        ${thumb ? `<img src="${thumb}" alt="Thumbnail for ${escapeHtml(item.title || "record")}" style="width:100%; max-width:220px; height:auto; border-radius:8px; margin-bottom:8px; display:block;" onerror="this.style.display='none';">` : ""}
+        <div class="popup-title">${item.title || "(untitled)"}</div>
+        ${creator ? `<div><strong>Creator:</strong> ${creator}</div>` : ""}
+        ${collection ? `<div><strong>Collection:</strong> ${collection}</div>` : ""}
+        ${date ? `<div><strong>Date:</strong> ${date}</div>` : ""}
+        ${type ? `<div><strong>Type:</strong> ${type}</div>` : ""}
+        <a class="popup-link" href="${item.link || '#'}" target="_blank" rel="noopener">View Original Record</a>
+      `;
+    }
+
+    function renderFilterList(records, fieldName, activeSet, containerEl, includeColorDots = false) {
       const counts = {};
       records.forEach(item => {
-        const key = item.collection || "Uncategorized";
+        const key = item[fieldName] || (fieldName === 'collection' ? 'Uncategorized' : `Uncategorized ${fieldName}`);
         counts[key] = (counts[key] || 0) + 1;
       });
 
       const names = Object.keys(counts).sort((a, b) => a.localeCompare(b));
 
-      if (activeCollections.size === 0) {
-        names.forEach(name => activeCollections.add(name));
+      if (activeSet.size === 0) {
+        names.forEach(name => activeSet.add(name));
       }
 
-      collectionList.innerHTML = names.map(name => `
-        <label class="collection-item">
-          <input type="checkbox" value="${escapeHtml(name)}" ${activeCollections.has(name) ? "checked" : ""}>
-          <span>${escapeHtml(name)}</span>
+      containerEl.innerHTML = names.map(name => `
+        <label class="filter-item">
+          <input type="checkbox" value="${escapeHtml(name)}" ${activeSet.has(name) ? "checked" : ""}>
+          <span>${includeColorDots ? `<span class="legend-dot" style="background:${getInstitutionColor(name)};"></span>` : ""}${escapeHtml(name)}</span>
           <span class="count-badge">${counts[name]}</span>
         </label>
       `).join("");
 
-      collectionList.querySelectorAll('input[type="checkbox"]').forEach(box => {
+      containerEl.querySelectorAll('input[type="checkbox"]').forEach(box => {
         box.addEventListener('change', () => {
-          if (box.checked) activeCollections.add(box.value);
-          else activeCollections.delete(box.value);
+          if (box.checked) activeSet.add(box.value);
+          else activeSet.delete(box.value);
           applyFilters();
         });
       });
+    }
+
+    function renderAllFilters(records) {
+      renderFilterList(records, 'institution', activeInstitutions, institutionList, true);
+      renderFilterList(records, 'record_type', activeRecordTypes, recordTypeList, false);
+      renderFilterList(records, 'collection', activeCollections, collectionList, false);
     }
 
     function renderResultsList(items) {
@@ -217,9 +286,10 @@ function popupHtml(item) {
           <div class="result-title">${escapeHtml(item.title || "(untitled)")}</div>
           ${item.creator ? `<div class="meta-line"><strong>Creator:</strong> ${escapeHtml(item.creator)}</div>` : ""}
           <div class="meta-line">
+            ${item.institution ? `<span class="pill">${escapeHtml(item.institution)}</span>` : ""}
+            ${item.record_type ? `<span class="pill">${escapeHtml(item.record_type)}</span>` : ""}
             ${item.collection ? `<span class="pill">${escapeHtml(item.collection)}</span>` : ""}
             ${item.date ? `<span class="pill">${escapeHtml(item.date)}</span>` : ""}
-            ${item.record_type ? `<span class="pill">${escapeHtml(item.record_type)}</span>` : ""}
           </div>
         </div>
       `).join("");
@@ -243,8 +313,13 @@ function popupHtml(item) {
 
       const bounds = [];
       items.forEach(item => {
+        const fill = getInstitutionColor(item.institution || "Unknown Institution");
         const marker = L.circleMarker([item.latitude_num, item.longitude_num], {
-          radius: 6, color: '#004C46', weight: 1.5, fillColor: '#F2A900', fillOpacity: 0.9
+          radius: 6,
+          color: fill,
+          weight: 1.5,
+          fillColor: fill,
+          fillOpacity: 0.9
         }).bindPopup(popupHtml(item));
         marker.addTo(markerLayer);
         markerIndex.set(item.__markerKey, marker);
@@ -258,10 +333,14 @@ function popupHtml(item) {
     function applyFilters() {
       const q = searchInput.value.trim().toLowerCase();
       activeRecords = allMappedRecords.filter(item => {
+        const institutionName = item.institution || "Uncategorized institution";
+        const recordTypeName = item.record_type || "Uncategorized record_type";
         const collectionName = item.collection || "Uncategorized";
+        const institutionOk = activeInstitutions.has(institutionName);
+        const recordTypeOk = activeRecordTypes.has(recordTypeName);
         const collectionOk = activeCollections.has(collectionName);
         const textOk = !q || item.__searchBlob.includes(q);
-        return collectionOk && textOk;
+        return institutionOk && recordTypeOk && collectionOk && textOk;
       });
 
       drawMarkers(activeRecords);
@@ -269,13 +348,45 @@ function popupHtml(item) {
       statusText.textContent = `Showing ${activeRecords.length.toLocaleString()} mapped records`;
     }
 
+    function setAllChecked(containerEl, activeSet, checked) {
+      containerEl.querySelectorAll('input[type="checkbox"]').forEach(box => {
+        box.checked = checked;
+        if (checked) activeSet.add(box.value);
+        else activeSet.delete(box.value);
+      });
+    }
+
     function resetFilters() {
       searchInput.value = "";
+
+      activeInstitutions.clear();
+      activeRecordTypes.clear();
       activeCollections.clear();
-      const names = [...new Set(allMappedRecords.map(item => item.collection || "Uncategorized"))];
-      names.forEach(name => activeCollections.add(name));
-      collectionList.querySelectorAll('input[type="checkbox"]').forEach(box => { box.checked = true; });
+
+      const institutionNames = [...new Set(allMappedRecords.map(item => item.institution || "Uncategorized institution"))];
+      const recordTypeNames = [...new Set(allMappedRecords.map(item => item.record_type || "Uncategorized record_type"))];
+      const collectionNames = [...new Set(allMappedRecords.map(item => item.collection || "Uncategorized"))];
+
+      institutionNames.forEach(name => activeInstitutions.add(name));
+      recordTypeNames.forEach(name => activeRecordTypes.add(name));
+      collectionNames.forEach(name => activeCollections.add(name));
+
+      setAllChecked(institutionList, activeInstitutions, true);
+      setAllChecked(recordTypeList, activeRecordTypes, true);
+      setAllChecked(collectionList, activeCollections, true);
+
       applyFilters();
+    }
+
+    function wireCollapsibles() {
+      document.querySelectorAll('.collapsible-header').forEach(header => {
+        header.addEventListener('click', () => {
+          const panel = header.closest('.panel');
+          panel.classList.toggle('collapsed');
+          const btn = header.querySelector('button');
+          btn.textContent = panel.classList.contains('collapsed') ? '+' : '−';
+        });
+      });
     }
 
     async function loadData() {
@@ -297,7 +408,7 @@ function popupHtml(item) {
           };
         }).filter(item => item.latitude_num !== null && item.longitude_num !== null);
 
-        renderCollections(allMappedRecords);
+        renderAllFilters(allMappedRecords);
         applyFilters();
       } catch (err) {
         console.error(err);
@@ -307,6 +418,7 @@ function popupHtml(item) {
     }
 
     createMap();
+    wireCollapsibles();
     loadData();
 
     searchBtn.addEventListener('click', applyFilters);
@@ -314,17 +426,33 @@ function popupHtml(item) {
     searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyFilters(); });
     resetBtn.addEventListener('click', resetFilters);
 
-    selectAllBtn.addEventListener('click', () => {
-      collectionList.querySelectorAll('input[type="checkbox"]').forEach(box => {
-        box.checked = true;
-        activeCollections.add(box.value);
-      });
+    selectAllInstitutionsBtn.addEventListener('click', () => {
+      setAllChecked(institutionList, activeInstitutions, true);
       applyFilters();
     });
 
-    clearAllBtn.addEventListener('click', () => {
-      collectionList.querySelectorAll('input[type="checkbox"]').forEach(box => { box.checked = false; });
-      activeCollections.clear();
+    clearAllInstitutionsBtn.addEventListener('click', () => {
+      setAllChecked(institutionList, activeInstitutions, false);
+      applyFilters();
+    });
+
+    selectAllRecordTypesBtn.addEventListener('click', () => {
+      setAllChecked(recordTypeList, activeRecordTypes, true);
+      applyFilters();
+    });
+
+    clearAllRecordTypesBtn.addEventListener('click', () => {
+      setAllChecked(recordTypeList, activeRecordTypes, false);
+      applyFilters();
+    });
+
+    selectAllCollectionsBtn.addEventListener('click', () => {
+      setAllChecked(collectionList, activeCollections, true);
+      applyFilters();
+    });
+
+    clearAllCollectionsBtn.addEventListener('click', () => {
+      setAllChecked(collectionList, activeCollections, false);
       applyFilters();
     });
   </script>
