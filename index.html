@@ -149,20 +149,24 @@
   <div id="counter">Loading records…</div>
 </header>
 
-<div id="results" class="results"></div>
-<div class="topic-grid">
-  <div class="topic-card" onclick="runSearch('Map')">
-    <span class="topic-icon">🗺️</span> Maps
-  </div>
-  <div class="topic-card" onclick="runSearch('Finding Aid')">
-    <span class="topic-icon">🌲</span> Finding Aids
-  </div>
-  <div class="topic-card" onclick="runSearch('Native American')">
-    <span class="topic-icon">🏺</span> Indigenous History
-  </div>
-  <div class="topic-card" onclick="runSearch('Photograph')">
-    <span class="topic-icon">📸</span> Photographs
-  </div>
+<div class="topic-card" onclick="runSearch('Map')">
+  <img class="topic-icon" src="https://www.thehumboldtproject.org/files/original/fe9c0c21cd8e38392672c10613dafe728dd694ae.jpg" alt="Maps">
+  Maps
+</div>
+
+<div class="topic-card" onclick="runSearch('Public Art')">
+  <img class="topic-icon" src="https://services7.arcgis.com/jU4YVDLdY8n9WFKw/arcgis/rest/services/Art_Location_(Public)/FeatureServer/0/38/attachments/42?w=1360" alt="Public Art">
+  Finding Aids
+</div>
+
+<div class="topic-card" onclick="runSearch('Postcard')">
+  <img class="topic-icon" src="https://cdm16166.contentdm.oclc.org/digital/download/collection/mckay/id/314/size/full" alt="Postcards">
+  Indigenous History
+</div>
+
+<div class="topic-card" onclick="runSearch('Photograph')">
+  <img class="topic-icon" src="https://cdm16166.contentdm.oclc.org/digital/download/collection/palmquist/id/1050/size/full" alt="Photographs">
+  Photographs
 </div>
 <div style="text-align:center; margin: 20px;">
     <button id="loadMoreBtn" class="btn" style="display:none;" onclick="loadMore()">Load More Results</button>
