@@ -47,9 +47,9 @@
     /* Topic Grid (The New Landing Page UI) */
     .topic-grid { 
         display: grid; 
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); 
+        grid-template-columns: repeat(4, 180px); /* 4 cards in a row */ 
         gap: 16px; 
-        max-width: 800px; 
+        justify-content: center; /* centers the whole grid */ 
         margin: 20px auto 40px; 
     }
     .topic-card {
@@ -63,6 +63,11 @@
         color: var(--primary);
         transition: all 0.2s ease;
         box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        width: 180px;
+        height: 180px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
     .topic-card:hover { 
         transform: translateY(-4px); 
@@ -76,7 +81,7 @@
         object-fit: cover;
         border-radius: 8px;
         margin-bottom: 10px;
-}
+    }
 
     /* Results list (catalog style) */
     .results { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
@@ -119,7 +124,7 @@
     }
     @media (max-width: 700px) {
         .modal-content { grid-template-columns: 1fr; margin: 2% auto; padding: 20px; }
-        .topic-grid { grid-template-columns: 1fr 1fr; }
+        .topic-grid { grid-template-columns: repeat(2, 180px); }
     }
     .close { position: absolute; right: 20px; top: 15px; font-size: 32px; cursor: pointer; color: #999; line-height: 1; }
     .close:hover { color: var(--primary); }
@@ -155,25 +160,29 @@
   <div id="counter">Loading records…</div>
 </header>
 
-<div class="topic-card" onclick="runSearch('Map')">
-  <img class="topic-icon" src="https://www.thehumboldtproject.org/files/original/fe9c0c21cd8e38392672c10613dafe728dd694ae.jpg" alt="Maps">
-  Maps
+<div class="topic-grid">
+  <div class="topic-card" onclick="runSearch('Map')">
+    <img class="topic-icon" src="https://www.thehumboldtproject.org/files/original/fe9c0c21cd8e38392672c10613dafe728dd694ae.jpg" alt="Maps">
+    Maps
+  </div>
+
+  <div class="topic-card" onclick="runSearch('Postcard')">
+    <img class="topic-icon" src="https://cdm16166.contentdm.oclc.org/digital/download/collection/mckay/id/314/size/full" alt="Postcards">
+    Postcards
+  </div>
+
+  <div class="topic-card" onclick="runSearch('Photograph')">
+    <img class="topic-icon" src="https://cdm16166.contentdm.oclc.org/digital/download/collection/palmquist/id/1050/size/full" alt="Photographs">
+    Photographs
+  </div>
+
+  <div class="topic-card" onclick="runSearch('Public Art')">
+    <img class="topic-icon" src="https://services7.arcgis.com/jU4YVDLdY8n9WFKw/arcgis/rest/services/Art_Location_(Public)/FeatureServer/0/38/attachments/42?w=1360" alt="Public Art">
+    Public Art
+  </div>
 </div>
 
-<div class="topic-card" onclick="runSearch('Public Art')">
-  <img class="topic-icon" src="https://services7.arcgis.com/jU4YVDLdY8n9WFKw/arcgis/rest/services/Art_Location_(Public)/FeatureServer/0/38/attachments/42?w=1360" alt="Public Art">
-  Finding Aids
-</div>
-
-<div class="topic-card" onclick="runSearch('Postcard')">
-  <img class="topic-icon" src="https://cdm16166.contentdm.oclc.org/digital/download/collection/mckay/id/314/size/full" alt="Postcards">
-  Indigenous History
-</div>
-
-<div class="topic-card" onclick="runSearch('Photograph')">
-  <img class="topic-icon" src="https://cdm16166.contentdm.oclc.org/digital/download/collection/palmquist/id/1050/size/full" alt="Photographs">
-  Photographs
-</div>
+<div id="results" class="results"></div>
 <div style="text-align:center; margin: 20px;">
     <button id="loadMoreBtn" class="btn" style="display:none;" onclick="loadMore()">Load More Results</button>
 </div>
