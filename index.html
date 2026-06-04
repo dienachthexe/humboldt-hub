@@ -42,7 +42,6 @@
         box-shadow: 0 4px 12px rgba(0,76,70,0.15); 
     }
 
-    /* Facet Filters */
     .filters {
         max-width: 1000px;
         margin: 12px auto;
@@ -56,10 +55,25 @@
         padding: 9px 12px;
         border-radius: 8px;
         border: 1px solid #ccc;
+        max-width: 190px;
         background: #fff;
         color: var(--text);
         font-size: 0.95rem;
-        max-width: 180px;
+    }
+
+    .filters button {
+        padding: 9px 12px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        background: #fff;
+        color: var(--primary);
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .filters button:hover {
+        border-color: var(--primary);
+        background: #f0f4f8;
     }
 
     #counter { text-align: center; color: #7f8c8d; font-size: 0.9rem; margin: 12px 0; min-height: 1.2em; }
@@ -175,26 +189,17 @@
   <h1>Digital Humboldt</h1>
   <p>Search the Historical Collections of Humboldt County</p>
   <div class="search-container">
-    <input id="search" type="text" placeholder="Search by title, subject, creator, or description…"/>
+    <input id="search" type="text" placeholder="Search by title, subject, creator, or description..."/>
   </div>
-  <div class="filters" aria-label="Search filters">
-    <select id="creatorFilter">
-      <option value="">All creators</option>
-    </select>
-    <select id="subjectFilter">
-      <option value="">All subjects</option>
-    </select>
-    <select id="dateFilter">
-      <option value="">All dates</option>
-    </select>
-    <select id="recordTypeFilter">
-      <option value="">All record types</option>
-    </select>
-    <select id="platformFilter">
-      <option value="">All platforms</option>
-    </select>
+  <div class="filters">
+    <select id="creatorFilter"><option value="">All creators</option></select>
+    <select id="subjectFilter"><option value="">All subjects</option></select>
+    <select id="dateFilter"><option value="">All dates</option></select>
+    <select id="recordTypeFilter"><option value="">All record types</option></select>
+    <select id="platformFilter"><option value="">All platforms</option></select>
+    <button id="clearFiltersBtn" type="button">Clear filters</button>
   </div>
-  <div id="counter">Loading records…</div>
+  <div id="counter">Loading records...</div>
 </header>
 
 <div class="topic-grid">
@@ -244,6 +249,14 @@ let data = [];
   const elSearch = document.getElementById('search');
   const modal = document.getElementById('itemModal');
 
+  const facetConfig = [
+    { id: 'creatorFilter', field: 'creator', label: 'All creators', split: true },
+    { id: 'subjectFilter', field: 'subject', label: 'All subjects', split: true },
+    { id: 'dateFilter', field: 'date', label: 'All dates', split: false },
+    { id: 'recordTypeFilter', field: 'record_type', label: 'All record types', split: false },
+    { id: 'platformFilter', field: 'platform_type', label: 'All platforms', split: false }
+  ];
+
   // Helpers
   const normalizeYear = d => {
     if (!d) return "";
@@ -256,11 +269,11 @@ let data = [];
 
   function escapeHtml(value) {
     return String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
   }
 
   function splitFacetValues(value) {
@@ -271,86 +284,99 @@ let data = [];
       .filter(Boolean);
   }
 
-  function populateFacetDropdowns(items) {
-    populateSelect('creatorFilter', items, 'creator', 'All creators', false);
-    populateSelect('subjectFilter', items, 'subject', 'All subjects', true);
-    populateSelect('dateFilter', items, 'date', 'All dates', false);
-    populateSelect('recordTypeFilter', items, 'record_type', 'All record types', false);
-    populateSelect('platformFilter', items, 'platform_type', 'All platforms', false);
+  function getFacetValues(item, field, split) {
+    const value = item[field];
+    if (!value || String(value).trim() === '') return [];
+    return split ? splitFacetValues(value) : [String(value).trim()];
   }
 
-  function populateSelect(selectId, items, field, label, splitValues) {
-    const select = document.getElementById(selectId);
-    let values = [];
+  function getCurrentFacetSelections() {
+    const selections = {};
+    facetConfig.forEach(facet => {
+      const select = document.getElementById(facet.id);
+      selections[facet.id] = select ? select.value : '';
+    });
+    return selections;
+  }
 
-    items.forEach(item => {
-      if (splitValues) {
-        values.push(...splitFacetValues(item[field]));
-      } else if (item[field] && String(item[field]).trim() !== "") {
-        values.push(String(item[field]).trim());
+  function populateFacetDropdowns(items) {
+    const selections = getCurrentFacetSelections();
+
+    facetConfig.forEach(facet => {
+      const select = document.getElementById(facet.id);
+      if (!select) return;
+
+      const counts = new Map();
+
+      items.forEach(item => {
+        getFacetValues(item, facet.field, facet.split).forEach(value => {
+          counts.set(value, (counts.get(value) || 0) + 1);
+        });
+      });
+
+      const values = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+      const previousValue = selections[facet.id];
+
+      select.innerHTML = `<option value="">${facet.label}</option>` +
+        values.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)} (${counts.get(value).toLocaleString()})</option>`).join('');
+
+      if (previousValue && values.includes(previousValue)) {
+        select.value = previousValue;
       }
     });
-
-    values = [...new Set(values)].sort((a, b) => a.localeCompare(b));
-
-    select.innerHTML =
-      `<option value="">${label}</option>` +
-      values.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
   }
 
-  function hasActiveFilters() {
-    return ['creatorFilter', 'subjectFilter', 'dateFilter', 'recordTypeFilter', 'platformFilter']
-      .some(id => document.getElementById(id).value !== "");
-  }
-
-  function applyFacetFilters(items) {
-    const creator = document.getElementById('creatorFilter').value;
-    const subject = document.getElementById('subjectFilter').value;
-    const date = document.getElementById('dateFilter').value;
-    const recordType = document.getElementById('recordTypeFilter').value;
-    const platform = document.getElementById('platformFilter').value;
-
-    return items.filter(item => {
-      const itemSubjects = splitFacetValues(item.subject);
-
-      return (!creator || item.creator === creator)
-        && (!subject || itemSubjects.includes(subject))
-        && (!date || item.date === date)
-        && (!recordType || item.record_type === recordType)
-        && (!platform || item.platform_type === platform);
+  function clearFacetSelections() {
+    facetConfig.forEach(facet => {
+      const select = document.getElementById(facet.id);
+      if (select) select.value = '';
     });
   }
 
-  function getSearchMatches(query) {
+  function getSearchBaseResults() {
+    const query = elSearch.value.trim();
+
     if (query.length < 2) {
-      return data;
+      return [];
     }
 
-    // This part forces Fuse to find EVERY word instead of ANY word
     const andQuery = query.split(' ').filter(w => w).map(w => `'${w}`).join(' ');
     return fuse.search(andQuery).map(r => r.item);
   }
 
-  function updateResultsFromCurrentState() {
+  function applyFacetFilters(items) {
+    return items.filter(item => {
+      return facetConfig.every(facet => {
+        const select = document.getElementById(facet.id);
+        const selectedValue = select ? select.value : '';
+        if (!selectedValue) return true;
+        return getFacetValues(item, facet.field, facet.split).includes(selectedValue);
+      });
+    });
+  }
+
+  function updateResultsFromSearchAndFacets() {
     const query = elSearch.value.trim();
     const topicGrid = document.querySelector('.topic-grid');
-    const activeFilters = hasActiveFilters();
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
 
-    // Reset limit for every new search/filter change
     displayLimit = 100;
 
-    if (query.length < 2 && !activeFilters) {
-      elResults.innerHTML = ""; 
+    if (query.length < 2) {
+      elResults.innerHTML = "";
       if (topicGrid) topicGrid.style.display = "grid";
-      document.getElementById('loadMoreBtn').style.display = 'none';
+      if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+      clearFacetSelections();
+      populateFacetDropdowns(data);
       elCounter.textContent = `Ready to search across ${data.length.toLocaleString()} records`;
       return;
     }
 
     if (topicGrid) topicGrid.style.display = "none";
 
-    const matches = getSearchMatches(query);
-    render(applyFacetFilters(matches));
+    const searchedItems = getSearchBaseResults();
+    populateFacetDropdowns(searchedItems);
+    render(applyFacetFilters(searchedItems));
   }
 
   // 1. Load Data and Initialize Search Engine
@@ -366,8 +392,6 @@ let data = [];
         date: normalizeYear(item.date)
       }));
 
-      populateFacetDropdowns(data);
-
       // Set up the Fuzzy Search Engine
       const options = {
         keys: ['title', 'description', 'subject', 'collection', 'creator'],
@@ -377,6 +401,7 @@ let data = [];
       };
       fuse = new Fuse(data, options);
 
+      populateFacetDropdowns(data);
       elCounter.textContent = `Ready to search across ${data.length.toLocaleString()} records`;
       // We don't call render(data) here because we want the page to stay clean at first
     })
@@ -434,24 +459,35 @@ let displayLimit = 100; // Keep track of how many to show
   }
 
   // 3. Search Logic (Resetting the limit on new search)
-  elSearch.addEventListener('input', updateResultsFromCurrentState);
+  elSearch.addEventListener('input', () => {
+    clearFacetSelections();
+    updateResultsFromSearchAndFacets();
+  });
 
-  ['creatorFilter', 'subjectFilter', 'dateFilter', 'recordTypeFilter', 'platformFilter']
-    .forEach(id => {
-      document.getElementById(id).addEventListener('change', updateResultsFromCurrentState);
-    });
+  facetConfig.forEach(facet => {
+    const select = document.getElementById(facet.id);
+    if (select) {
+      select.addEventListener('change', updateResultsFromSearchAndFacets);
+    }
+  });
+
+  document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+    clearFacetSelections();
+    updateResultsFromSearchAndFacets();
+  });
 
 // 4. Topic Card Helper
 function runSearch(term) {
     elSearch.value = term;
+    clearFacetSelections();
 
     // Add this line to hide the cards when a topic is clicked:
     const topicGrid = document.querySelector('.topic-grid');
     if (topicGrid) topicGrid.style.display = "none";
 
-    displayLimit = 100;
-    const results = fuse.search(term);
-    render(applyFacetFilters(results.map(r => r.item)));
+    const results = fuse.search(term).map(r => r.item);
+    populateFacetDropdowns(results);
+    render(applyFacetFilters(results));
     elSearch.focus();
 }
 
