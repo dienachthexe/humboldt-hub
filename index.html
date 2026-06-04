@@ -42,6 +42,26 @@
         box-shadow: 0 4px 12px rgba(0,76,70,0.15); 
     }
 
+    /* Facet Filters */
+    .filters {
+        max-width: 1000px;
+        margin: 12px auto;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .filters select {
+        padding: 9px 12px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        background: #fff;
+        color: var(--text);
+        font-size: 0.95rem;
+        max-width: 180px;
+    }
+
     #counter { text-align: center; color: #7f8c8d; font-size: 0.9rem; margin: 12px 0; min-height: 1.2em; }
 
     /* Topic Grid (The New Landing Page UI) */
@@ -157,6 +177,23 @@
   <div class="search-container">
     <input id="search" type="text" placeholder="Search by title, subject, creator, or description…"/>
   </div>
+  <div class="filters" aria-label="Search filters">
+    <select id="creatorFilter">
+      <option value="">All creators</option>
+    </select>
+    <select id="subjectFilter">
+      <option value="">All subjects</option>
+    </select>
+    <select id="dateFilter">
+      <option value="">All dates</option>
+    </select>
+    <select id="recordTypeFilter">
+      <option value="">All record types</option>
+    </select>
+    <select id="platformFilter">
+      <option value="">All platforms</option>
+    </select>
+  </div>
   <div id="counter">Loading records…</div>
 </header>
 
@@ -217,6 +254,105 @@ let data = [];
   const fallbackThumb = 'https://img.icons8.com/color/80/document.png';
   const thumbOrFallback = item => (item.thumbnail && String(item.thumbnail).trim() !== "" ? item.thumbnail : fallbackThumb);
 
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function splitFacetValues(value) {
+    if (!value) return [];
+    return String(value)
+      .split(';')
+      .map(v => v.trim())
+      .filter(Boolean);
+  }
+
+  function populateFacetDropdowns(items) {
+    populateSelect('creatorFilter', items, 'creator', 'All creators', false);
+    populateSelect('subjectFilter', items, 'subject', 'All subjects', true);
+    populateSelect('dateFilter', items, 'date', 'All dates', false);
+    populateSelect('recordTypeFilter', items, 'record_type', 'All record types', false);
+    populateSelect('platformFilter', items, 'platform_type', 'All platforms', false);
+  }
+
+  function populateSelect(selectId, items, field, label, splitValues) {
+    const select = document.getElementById(selectId);
+    let values = [];
+
+    items.forEach(item => {
+      if (splitValues) {
+        values.push(...splitFacetValues(item[field]));
+      } else if (item[field] && String(item[field]).trim() !== "") {
+        values.push(String(item[field]).trim());
+      }
+    });
+
+    values = [...new Set(values)].sort((a, b) => a.localeCompare(b));
+
+    select.innerHTML =
+      `<option value="">${label}</option>` +
+      values.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+  }
+
+  function hasActiveFilters() {
+    return ['creatorFilter', 'subjectFilter', 'dateFilter', 'recordTypeFilter', 'platformFilter']
+      .some(id => document.getElementById(id).value !== "");
+  }
+
+  function applyFacetFilters(items) {
+    const creator = document.getElementById('creatorFilter').value;
+    const subject = document.getElementById('subjectFilter').value;
+    const date = document.getElementById('dateFilter').value;
+    const recordType = document.getElementById('recordTypeFilter').value;
+    const platform = document.getElementById('platformFilter').value;
+
+    return items.filter(item => {
+      const itemSubjects = splitFacetValues(item.subject);
+
+      return (!creator || item.creator === creator)
+        && (!subject || itemSubjects.includes(subject))
+        && (!date || item.date === date)
+        && (!recordType || item.record_type === recordType)
+        && (!platform || item.platform_type === platform);
+    });
+  }
+
+  function getSearchMatches(query) {
+    if (query.length < 2) {
+      return data;
+    }
+
+    // This part forces Fuse to find EVERY word instead of ANY word
+    const andQuery = query.split(' ').filter(w => w).map(w => `'${w}`).join(' ');
+    return fuse.search(andQuery).map(r => r.item);
+  }
+
+  function updateResultsFromCurrentState() {
+    const query = elSearch.value.trim();
+    const topicGrid = document.querySelector('.topic-grid');
+    const activeFilters = hasActiveFilters();
+
+    // Reset limit for every new search/filter change
+    displayLimit = 100;
+
+    if (query.length < 2 && !activeFilters) {
+      elResults.innerHTML = ""; 
+      if (topicGrid) topicGrid.style.display = "grid";
+      document.getElementById('loadMoreBtn').style.display = 'none';
+      elCounter.textContent = `Ready to search across ${data.length.toLocaleString()} records`;
+      return;
+    }
+
+    if (topicGrid) topicGrid.style.display = "none";
+
+    const matches = getSearchMatches(query);
+    render(applyFacetFilters(matches));
+  }
+
   // 1. Load Data and Initialize Search Engine
   fetch('data.json')
     .then(response => {
@@ -229,6 +365,8 @@ let data = [];
         ...item,
         date: normalizeYear(item.date)
       }));
+
+      populateFacetDropdowns(data);
 
       // Set up the Fuzzy Search Engine
       const options = {
@@ -296,29 +434,12 @@ let displayLimit = 100; // Keep track of how many to show
   }
 
   // 3. Search Logic (Resetting the limit on new search)
-  elSearch.addEventListener('input', (e) => {
-    const query = e.target.value.trim();
-    const topicGrid = document.querySelector('.topic-grid');
+  elSearch.addEventListener('input', updateResultsFromCurrentState);
 
-    // Reset limit for every new search
-    displayLimit = 100;
-
-    if (query.length < 2) {
-      elResults.innerHTML = ""; 
-      if (topicGrid) topicGrid.style.display = "grid";
-      document.getElementById('loadMoreBtn').style.display = 'none';
-      elCounter.textContent = `Ready to search across ${data.length.toLocaleString()} records`;
-      return;
-    }
-
-    if (topicGrid) topicGrid.style.display = "none";
-
-    // This part forces Fuse to find EVERY word instead of ANY word
-    const andQuery = query.split(' ').filter(w => w).map(w => `'${w}`).join(' ');
-    const results = fuse.search(andQuery);
-
-    render(results.map(r => r.item));
-  });
+  ['creatorFilter', 'subjectFilter', 'dateFilter', 'recordTypeFilter', 'platformFilter']
+    .forEach(id => {
+      document.getElementById(id).addEventListener('change', updateResultsFromCurrentState);
+    });
 
 // 4. Topic Card Helper
 function runSearch(term) {
@@ -328,8 +449,9 @@ function runSearch(term) {
     const topicGrid = document.querySelector('.topic-grid');
     if (topicGrid) topicGrid.style.display = "none";
 
+    displayLimit = 100;
     const results = fuse.search(term);
-    render(results.map(r => r.item));
+    render(applyFacetFilters(results.map(r => r.item)));
     elSearch.focus();
 }
 
