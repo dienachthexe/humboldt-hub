@@ -717,7 +717,7 @@ function runSearch(term) {
           <div>
             <div class="creator-context-name">${escapeHtml(creatorName)}</div>
             ${dates ? `<div class="creator-context-dates">${escapeHtml(dates)}</div>` : ''}
-            ${item.creator_description ? `<div class="creator-context-description">${escapeHtml(item.creator_description)}</div>` : ''}
+            ${item.creator_wikidata_description ? `<div class="creator-context-description">${escapeHtml(item.creator_wikidata_description)}</div>` : ''}
             ${sourceUrl ? `<div class="creator-context-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener">View linked data source</a></div>` : ''}
           </div>
         </div>
