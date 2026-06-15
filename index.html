@@ -176,6 +176,52 @@
     .modal-info h2 { margin: 0 0 10px 0; color: var(--primary); font-size: 1.5rem; }
     .meta-label { font-weight: 700; color: #6b7785; text-transform: uppercase; font-size: 0.75rem; margin-top: 15px; letter-spacing: 0.5px; }
 
+
+
+    .creator-context {
+        margin-top: 18px;
+        padding: 14px;
+        border: 1px solid #e7eaef;
+        border-left: 4px solid var(--accent);
+        border-radius: 10px;
+        background: #fffdf5;
+    }
+
+    .creator-context-header {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+    }
+
+    .creator-context-img {
+        width: 76px;
+        height: 76px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        background: #f8f9fa;
+        flex: 0 0 auto;
+    }
+
+    .creator-context-name {
+        font-weight: 700;
+        color: var(--primary);
+        margin-bottom: 4px;
+    }
+
+    .creator-context-dates,
+    .creator-context-description,
+    .creator-context-source {
+        color: #555;
+        font-size: 0.9rem;
+        margin-top: 4px;
+    }
+
+    .creator-context-source a {
+        color: var(--primary);
+        font-weight: 600;
+    }
+
     .btn { 
         display: inline-block; 
         background: var(--primary); 
@@ -653,6 +699,32 @@ function runSearch(term) {
 }
 
   // 5. Modal Logic
+  function buildCreatorContext(item) {
+    const hasCreatorContext = item.creator_label || item.creator_description || item.creator_birth_date || item.creator_death_date || item.creator_image || item.creator_wikidata_source || item.creator_wikidata_uri;
+    if (!hasCreatorContext) return '';
+
+    const creatorName = item.creator_label || item.creator || 'Creator';
+    const dateParts = [item.creator_birth_date, item.creator_death_date]
+      .filter(value => value && String(value).trim() !== '');
+    const dates = dateParts.length ? dateParts.join('–') : '';
+    const sourceUrl = item.creator_wikidata_source || item.creator_wikidata_uri || '';
+
+    return `
+      <div class="creator-context">
+        <div class="meta-label">Creator context</div>
+        <div class="creator-context-header">
+          ${item.creator_image ? `<img class="creator-context-img" src="${escapeHtml(item.creator_image)}" alt="${escapeHtml(creatorName)}" onerror="this.style.display='none'">` : ''}
+          <div>
+            <div class="creator-context-name">${escapeHtml(creatorName)}</div>
+            ${dates ? `<div class="creator-context-dates">${escapeHtml(dates)}</div>` : ''}
+            ${item.creator_description ? `<div class="creator-context-description">${escapeHtml(item.creator_description)}</div>` : ''}
+            ${sourceUrl ? `<div class="creator-context-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener">View linked data source</a></div>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function openModalByIndex(index) {
     const item = currentFilteredItems[index];
     if (!item) return;
@@ -670,9 +742,12 @@ function runSearch(term) {
       { label: 'Date', value: item.date }
     ];
 
-    document.getElementById('modalMeta').innerHTML = fields
+    const recordMetadata = fields
       .filter(f => f.value && String(f.value).trim() !== "")
-      .map(f => `<div class="meta-label">${f.label}</div><div>${f.value}</div>`).join('');
+      .map(f => `<div class="meta-label">${escapeHtml(f.label)}</div><div>${escapeHtml(f.value)}</div>`)
+      .join('');
+
+    document.getElementById('modalMeta').innerHTML = recordMetadata + buildCreatorContext(item);
 
     modal.style.display = "block";
     modal.setAttribute('aria-hidden', 'false');
